@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { Mark, loaderOffset } from "@/components/splash-mark";
+import { signInWithGoogleNative, useIsNativeApp } from "@/lib/native-auth";
 
 /**
  * The signed-out face of "/", and the only page in the app that renders without
@@ -35,6 +37,29 @@ export function SignInCard({ message }: { message?: string }) {
 }
 
 function SignInCardBody({ message }: { message?: string }) {
+  /* Whether this is the Android shell rather than a browser. The store reports
+     false through hydration and true once Capacitor's bridge is present, so the
+     server-rendered form and the first client render agree. */
+  const native = useIsNativeApp();
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  /* Only reached in the app. On success the session is now in this WebView's
+     cookies, so a full navigation lets the server see it and render /home. */
+  const onGoogle = async () => {
+    if (busy) return;
+    setBusy(true);
+    setProblem(null);
+    const result = await signInWithGoogleNative();
+    if (result.ok) {
+      window.location.replace("/home");
+      return;
+    }
+    setBusy(false);
+    if (!result.cancelled) setProblem(result.error ?? "Sign-in failed.");
+  };
+
+  const shown = problem ?? message;
 
   return (
     <div className="fixed inset-0 flex flex-col items-center justify-center px-6">
@@ -47,17 +72,31 @@ function SignInCardBody({ message }: { message?: string }) {
         <Mark kind="splash" />
       </motion.div>
 
-      {/* A form post, not a client fetch. A form works with JavaScript disabled
-          and, more to the point here, survives the redirect to Google without the
-          verifier cookie depending on anything having hydrated first. */}
-      <form action="/auth/signin" method="post" className="mt-8">
+      {native ? (
+        /* In the app, a form post would leave for Google in the system browser and
+           strand the session there. This runs the deep-link flow instead — see
+           @/lib/native-auth. */
         <button
-          type="submit"
-          className="rounded-lg border border-white/12 bg-white/[0.06] px-6 py-2.5 text-sm font-medium text-[var(--color-ink)] transition-colors hover:bg-white/[0.1]"
+          type="button"
+          onClick={() => void onGoogle()}
+          disabled={busy}
+          className="mt-8 rounded-lg border border-white/12 bg-white/[0.06] px-6 py-2.5 text-sm font-medium text-[var(--color-ink)] transition-colors hover:bg-white/[0.1] disabled:opacity-50"
         >
-          Continue with Google
+          {busy ? "Signing in…" : "Continue with Google"}
         </button>
-      </form>
+      ) : (
+        /* A form post, not a client fetch. A form works with JavaScript disabled
+           and, more to the point here, survives the redirect to Google without the
+           verifier cookie depending on anything having hydrated first. */
+        <form action="/auth/signin" method="post" className="mt-8">
+          <button
+            type="submit"
+            className="rounded-lg border border-white/12 bg-white/[0.06] px-6 py-2.5 text-sm font-medium text-[var(--color-ink)] transition-colors hover:bg-white/[0.1]"
+          >
+            Continue with Google
+          </button>
+        </form>
+      )}
 
       {/* Only when EMAIL_SIGNIN is on, which is a local testing setup rather than
           a product decision. The automated suites cannot click through a Google
@@ -92,9 +131,9 @@ function SignInCardBody({ message }: { message?: string }) {
         </form>
       ) : null}
 
-      {message ? (
+      {shown ? (
         <p role="alert" className="mt-4 max-w-xs text-center text-sm text-[var(--color-ink-3)]">
-          {message}
+          {shown}
         </p>
       ) : (
         <p className="mt-4 text-sm text-[var(--color-ink-3)]">

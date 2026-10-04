@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // The Capacitor Android project. It is generated (npx cap add android) and
+    // its build outputs contain transpiled JS that ESLint would otherwise read
+    // and complain about. Native code is not linted by ESLint anyway.
+    "android/**",
   ]),
 ]);
 

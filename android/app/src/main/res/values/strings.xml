@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">PersonaOS</string>
+    <string name="title_activity_main">PersonaOS</string>
+    <string name="package_name">com.personaos.app</string>
+    <string name="custom_url_scheme">com.personaos.app</string>
+</resources>
