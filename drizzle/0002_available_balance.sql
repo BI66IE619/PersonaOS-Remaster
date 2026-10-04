@@ -1,0 +1,11 @@
+-- Spendable balance, distinct from the ledger balance.
+--
+-- A credit union share account can show a $305.16 ledger balance while only
+-- $300.16 is spendable, because $5 is held against pending authorisations. The
+-- user's banking app displays the spendable figure, so storing only the ledger
+-- one made PersonaOS read high by exactly the held amount.
+--
+-- Nullable rather than not-null: servers that omit available-balance fall back to
+-- the ledger balance at read time, which is what the app did before this column
+-- existed. A default of 0 would instead render as an emptied account.
+ALTER TABLE "finance_accounts" ADD COLUMN "available_balance_cents" integer;

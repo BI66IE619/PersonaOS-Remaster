@@ -1,0 +1,537 @@
+@import "tailwindcss";
+
+@theme {
+  /* Surfaces */
+  --color-base: #07080a;
+  --color-surface: #0e1013;
+  --color-raised: #16191e;
+  --color-inset: #1c2026;
+
+  /* Ink — monochrome by design */
+  --color-ink: #ffffff;
+  --color-ink-2: #d7dbe0;
+  --color-ink-3: #a9b0ba;
+
+  /* The accent is white. Colour is reserved for meaning:
+     good / mid / low and the sleep stages. Nothing else tints. */
+  --color-accent: #ffffff;
+  --color-accent-dim: #9aa1ab;
+  --color-good: #34d399;
+  --color-mid: #fbbf24;
+  --color-low: #f87171;
+
+  /* Sleep stages keep real hue — this is the one chart where colour
+     carries meaning, not decoration. */
+  --color-stage-deep: #5b5bd6;
+  --color-stage-rem: #22d3ee;
+  --color-stage-light: #64748b;
+  --color-stage-awake: #fbbf24;
+
+  --color-hairline: #ffffff14;
+  --color-hairline-strong: #ffffff26;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --radius-panel: 16px;
+  --blur-glass: 10px;
+
+  /* The floating mobile nav's footprint: bar height plus its bottom offset.
+     Shared so the page container can clear it exactly instead of guessing, and
+     so the offset grows for the home-indicator inset on iOS. */
+  --nav-h: 2.75rem;
+  --nav-gap: 1rem;
+
+  /* Motion. Three durations and two curves, shared so timing reads as one
+     system rather than a different feel per component. */
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.32, 0.64, 1);
+  --dur-1: 130ms;
+  --dur-2: 240ms;
+  --dur-3: 300ms;
+  /* Its own token rather than a shorter --dur-2, because the page fade is the
+     only animation in the app that is charged to a click the user is already
+     looking at. Everything else plays over content that has already settled, so
+     its length is a matter of taste; this one is added to the wait they had
+     already begun before they touched anything. Measured on the production
+     build, a tab costs 180-296ms before the new page is even in the DOM — the
+     payload, the render, the commit — and the fade was then spending 240ms on
+     top of that, finishing last, so the interface answered the click about a
+     third of a second after it had finished the actual work. 160ms keeps it
+     long enough to cover the swap it exists to hide and short enough that the
+     page is simply the new page by the time anyone is looking for it. */
+  --dur-page: 160ms;
+}
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-base);
+    color: var(--color-ink);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Ambient light, on its own fixed layer. background-attachment: fixed on
+     body repaints on every scroll frame; a fixed pseudo-element composites
+     once and costs nothing after that. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image:
+      radial-gradient(ellipse 65% 45% at 12% -8%, #ffffff1c 0%, transparent 62%),
+      radial-gradient(ellipse 55% 40% at 88% 2%, #ffffff14 0%, transparent 58%),
+      radial-gradient(ellipse 75% 55% at 50% 108%, #ffffff10 0%, transparent 62%);
+  }
+
+  /* Numerals must never jitter as they update */
+  .num {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
+
+  /* ---- interaction feedback ----
+     Deliberately no transform on hover. A hover that moves an element changes
+     what is under the cursor at the moment of a click, and anything automated
+     that measured a box before hovering would then be aiming at a box that has
+     shifted. Colour-only hover cannot do that. The press scale is safe because
+     it starts on mousedown, after the click point has been chosen. */
+  button:not([data-drag-row]):not([data-no-press]) {
+    transition:
+      transform var(--dur-1) var(--ease-out-quint),
+      border-color var(--dur-1) ease,
+      background-color var(--dur-1) ease,
+      color var(--dur-1) ease,
+      opacity var(--dur-1) ease;
+  }
+  button:not([data-drag-row]):not([data-no-press]):active:not(:disabled) {
+    transform: scale(0.985);
+  }
+  @media (hover: hover) {
+    button:not([data-drag-row]):not([data-no-press]):hover:not(:disabled) {
+      border-color: var(--color-hairline-strong);
+    }
+  }
+
+  /* Keyboard focus was previously whatever the browser chose, which on a dark
+     panel is a faint outline that is easy to lose. Offset keeps it off the
+     element's own border. */
+  :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid #ffffffb3;
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: #ffffff2e;
+  }
+
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: #ffffff14;
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: #ffffff2e;
+    background-clip: content-box;
+  }
+}
+
+/* Frosted panel: translucent fill plus a lit top edge. No backdrop-filter —
+   the depth comes from the particle field behind, which costs a fraction of a
+   blur and never stalls on scroll. The one exception is the mobile nav bar: it
+   is pinned rather than scrolled, so its blur is a fixed strip cost. */
+@utility panel {
+  position: relative;
+  background: linear-gradient(180deg, #ffffff14 0%, #ffffff0a 50%, #ffffff06 100%);
+  border: 1px solid #ffffff1f;
+  border-radius: var(--radius-panel);
+  box-shadow:
+    inset 0 1px 0 0 #ffffff24,
+    0 16px 40px -30px #000000e6;
+}
+
+@utility panel-raised {
+  position: relative;
+  background: linear-gradient(180deg, #ffffff1d 0%, #ffffff10 45%, #ffffff0a 100%);
+  border: 1px solid #ffffff2b;
+  border-radius: var(--radius-panel);
+  box-shadow:
+    inset 0 1px 0 0 #ffffff30,
+    0 20px 46px -26px #000000e6;
+}
+
+/* A brighter inset card for rows inside a glass panel. */
+@utility tile {
+  background: #ffffff0a;
+  border: 1px solid #ffffff14;
+  border-radius: 10px;
+}
+
+/* Glow discipline: four places only.
+   The ring stroke, the verdict headline, the last sparkline point,
+   the live sync dot. Never body text or chart labels. */
+@utility glow-text {
+  text-shadow:
+    0 0 18px color-mix(in oklab, var(--glow-color, var(--color-accent)) 42%, transparent),
+    0 0 44px color-mix(in oklab, var(--glow-color, var(--color-accent)) 20%, transparent);
+}
+
+/* The fifth place is the P, and it gets its own utility because the flight
+   needs two knobs that glow-text does not have. The same light, drawn from the
+   same two radii and the same two strengths — so the glow the title card holds
+   is the glow the corner receives, and the two halves of the hand-off cannot
+   drift into different light by one percentage point.
+
+   The strength is registered so it can be transitioned at all. An unregistered
+   custom property is an unparsed token to the compositor: the value would swap
+   from 42% to 0% in a single frame, and the light would go out like a switch
+   rather than dimming. The radii are not transitioned and do not need to be;
+   they are set once, in local units, by the letter they belong to. */
+@property --glow-strength {
+  syntax: "<percentage>";
+  inherits: true;
+  initial-value: 42%;
+}
+
+@utility mark-glow {
+  text-shadow:
+    0 0 var(--glow-r1, 18px)
+      color-mix(in oklab, var(--glow-color, var(--color-accent)) var(--glow-strength), transparent),
+    0 0 var(--glow-r2, 44px)
+      color-mix(in oklab, var(--glow-color, var(--color-accent)) calc(var(--glow-strength) * 20 / 42), transparent);
+}
+
+/* The light leaving the letter, in the two places it is painted: the halo round
+   it and the shadow inside it. One duration for both, driven by one attribute,
+   so the glow goes out as a single event — and the transition is declared on
+   the element that carries the value rather than on the glyph that reads it, so
+   one change reaches both instead of two having to be kept in step. */
+[data-glow-fade] {
+  transition: --glow-strength var(--dur-3) var(--ease-out-quint);
+}
+
+[data-glow-fade][data-glow="off"] {
+  --glow-strength: 0%;
+}
+
+[data-brand-morph] [data-mark-halo] {
+  transition: opacity var(--dur-3) var(--ease-out-quint);
+}
+
+@utility label-xs {
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: var(--color-ink-2);
+}
+
+@utility hairline-t {
+  border-top: 1px solid #ffffff14;
+}
+
+/* ============================ motion ============================
+   Everything below animates only transform and opacity, which the compositor
+   can run without asking the main thread to lay anything out. No width, height,
+   top, margin or box-shadow is ever animated here, because those force layout
+   or a full repaint on every frame, which is what turns a nice touch into a
+   stutter. */
+
+/* Panels and opt-in elements rise into place as they are scrolled to. The
+   starting state is only ever applied by JS, and only to elements that start
+   below the fold, so nothing above the fold is ever hidden and there is no
+   flash of invisible content on load.
+
+   Layer promotion is deliberately not part of [data-reveal]. Animating opacity
+   on a panel means the compositor flattens that whole subtree into one texture,
+   and asking for several of those in the same frame is what dropped frames on
+   Home and on Body. So the hidden state is cheap and immediate, while the
+   promotion is asked for separately by ScrollMotion, one panel per idle
+   callback, and only for panels the reader is about to reach. */
+@layer components {
+  [data-reveal] {
+    opacity: 0;
+    transform: translateY(10px);
+    transition:
+      opacity var(--dur-3) var(--ease-out-quint) var(--reveal-delay, 0ms),
+      transform var(--dur-3) var(--ease-out-quint) var(--reveal-delay, 0ms);
+  }
+  [data-queued] {
+    will-change: opacity, transform;
+  }
+  [data-reveal][data-shown] {
+    opacity: 1;
+    transform: none;
+  }
+  [data-shown][data-queued] {
+    will-change: auto;
+  }
+
+  /* How far through the page you are, as a hairline. Driven by transform alone
+     so scrolling it costs one composite per frame and no layout. */
+  .progress-hairline {
+    position: fixed;
+    inset: 0 0 auto 0;
+    height: 2px;
+    z-index: 70;
+    pointer-events: none;
+    transform: scaleX(0);
+    transform-origin: 0 50%;
+    /* Its own layer: the scroll handler rewrites this transform on every frame,
+       and without a layer each write would land as a repaint on the main
+       thread rather than a cheap compositor update. */
+    will-change: transform;
+    opacity: 0;
+    background: linear-gradient(90deg, #ffffff33, #ffffff 55%, #ffffff33);
+    transition: opacity var(--dur-2) ease;
+  }
+
+  /* A page arriving. Opacity only, and as an animation with a fill mode rather
+     than a transition: a finished animation holds its end value on its own, so
+     a throttled background tab or a dropped timer cannot leave a page sitting
+     at a low opacity. The failing case would be a page that never gets bright
+     again, and this makes it impossible. See @/components/page-fade.
+
+     No transform here. The reveal above already moves elements as they arrive,
+     and a second movement on the same subtree is what turns a page change into
+     a visible shift rather than a fade. */
+  @keyframes page-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  [data-page-fade][data-entering] {
+    animation: page-in var(--dur-page) var(--ease-out-quint) both;
+  }
+
+  /* A value or a tick arriving. Keyed on the value in JS so it replays each
+     time that value changes, which is the whole point. */
+  @keyframes pop-in {
+    0% {
+      opacity: 0;
+      transform: scale(0.7);
+    }
+    60% {
+      opacity: 1;
+      transform: scale(1.08);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  .pop-in {
+    animation: pop-in var(--dur-2) var(--ease-spring) both;
+  }
+
+  /* The streak dots wipe in left to right via a per-index animation-delay.
+     Transform only, no opacity: fourteen of these fire at once when the panel
+     is reached, and animating opacity as well meant fourteen more layers being
+     flattened in the same frame. */
+  @keyframes dot-in {
+    from {
+      transform: scaleY(0.35);
+    }
+    to {
+      transform: none;
+    }
+  }
+  .dot-in {
+    animation: dot-in var(--dur-1) var(--ease-out-quint) both;
+  }
+}
+
+/* Clears the pinned mobile nav bar: its height, plus whichever is larger of the
+   bottom offset and the safe-area inset, plus a hair of breathing room. The
+   desktop nav is in flow and never covers content, so sm:pb-20 takes over. */
+@utility pb-nav {
+  padding-bottom: calc(
+    var(--nav-h) + max(var(--nav-gap), env(safe-area-inset-bottom)) + 0.75rem
+  );
+}
+
+/* The cold start. `data-intro` is set by the pre-paint script in the root layout
+   and dropped when the P lands, so the reveal is the attribute going away rather
+   than anything JS animates panel by panel.
+
+   The transition is declared on the base rule, not on the hiding rule, and that
+   placement is the whole safety story. A transition lives on the element in the
+   state it is leaving, so putting it only on [data-intro] would make the release
+   instantaneous and quietly turn the arrival into a pop. Declared here, dropping
+   the attribute animates, per panel, on the delay the script already wrote onto
+   each one.
+
+   It also means the release cannot fail. Whatever went wrong — no React, a
+   dropped callback, a thrown error — the panels are visible the moment the
+   attribute is gone, because there is no per-panel bookkeeping to have been left
+   half done. The same reasoning as the reveal above, applied to a case where the
+   cost of being wrong is an empty page. */
+/* The cold start, and the transition is scoped to it rather than declared on
+   every panel everywhere.
+
+   That scoping is not tidiness, it is a measured regression. An earlier version
+   put the transition on the base `main .panel` rule so that dropping the
+   attribute would animate. It does — and it also gave every panel on every page
+   an opacity transition it did not have before, which is precisely what the note
+   above `[data-reveal]` warns about: a transition on panel opacity flattens that
+   subtree into one texture, and Body went from a 16.8ms p95 to 33.3ms with 14
+   dropped frames. A cold start that made the rest of the app stutter was not
+   worth the two lines it saved.
+
+   So the transition exists only while the intro does. `data-intro` holds the
+   page back, `done` releases it, and the attribute is left in place until the
+   last held element has arrived and ColdStart clears it. By then nothing is
+   transitioning, so removing the whole rule costs nothing. The delay is declared
+   under the same attribute for the same reason: it has to still be there when
+   the release reads it, and gone before anyone else does. */
+/* What the intro holds is the page, not just its panels.
+
+   The panels were the first thing to be hidden and they turned out to be the
+   easy half. The greeting, the date and the sync-freshness chip are not panels,
+   so they were never held at all: they appeared on the very first frame, before
+   the P had left the splash, and then everything else arrived underneath them.
+   The eye reads that as the page turning up empty first and being assembled
+   afterwards, which is the whole effect inverted.
+
+   So the hold is anchored to the page shell and takes its direct children — the
+   two headers, the trailing link — along with the panels inside main. The scroll
+   hairline is excluded because it is fixed to the top of the viewport and is
+   already transparent until the page is scrolled. main is excluded from the
+   direct-child list for the obvious reason: holding the container and the
+   panels inside it would run two opacity fades over each other and leave the
+   panels dim.
+
+   The stagger leads with the text, because the text is the greeting and a
+   greeting that arrives last is a greeting nobody reads. */
+[data-intro] [data-page-shell] > :not(main):not(.progress-hairline),
+[data-intro] [data-page-shell] > main .panel {
+  opacity: 0;
+  transform: translateY(10px);
+  transition:
+    opacity var(--dur-3) var(--ease-out-quint) var(--reveal-delay, 0ms),
+    transform var(--dur-3) var(--ease-out-quint) var(--reveal-delay, 0ms);
+}
+
+[data-intro="done"] [data-page-shell] > :not(main):not(.progress-hairline),
+[data-intro="done"] [data-page-shell] > main .panel {
+  opacity: 1;
+  transform: none;
+}
+
+[data-intro] [data-page-shell] > header:nth-of-type(1) {
+  --reveal-delay: 0ms;
+}
+[data-intro] [data-page-shell] > header:nth-of-type(2) {
+  --reveal-delay: 60ms;
+}
+[data-intro] [data-page-shell] > main .panel:nth-child(1) {
+  --reveal-delay: 120ms;
+}
+[data-intro] [data-page-shell] > main .panel:nth-child(2) {
+  --reveal-delay: 180ms;
+}
+[data-intro] [data-page-shell] > main .panel:nth-child(n + 3) {
+  --reveal-delay: 240ms;
+}
+[data-intro] [data-page-shell] > .panel {
+  --reveal-delay: 300ms;
+}
+
+/* The P, standing where the title card left it, on the very first frame of the
+   page the title card navigates to.
+
+   The navigation is a hard one, so no element survives it — the outgoing P and
+   the incoming P are two different elements in two different documents, and the
+   eye only forgives that if both are in the same place at the same size with the
+   same light. Which means the incoming one has to be in the document before
+   anything runs: an effect is a frame late, and a frame with no P on it is
+   exactly the blink this hand-off exists to avoid. So it is server-rendered, on
+   every page, and held back by the same attribute that holds the panels.
+
+   display rather than opacity, and that is the reason this is cheap rather than
+   the reason it is safe: on every ordinary page load the attribute is never
+   set, so the mark is laid out nowhere, costs nothing, and is removed a tick
+   later by the same effect that declines the flight. The attribute is the
+   authority for whether a P should be on screen, and the markup is always ready
+   for the case where the answer is yes. */
+[data-splash-prepaint] {
+  display: none;
+}
+
+[data-intro] [data-splash-prepaint] {
+  display: flex;
+}
+
+/* The nav brand is hidden for the duration, because the flying P is standing
+   exactly where it belongs. Two marks in one corner read as a mistake, and a
+   cross-fade between them is not something the eye forgives at that size.
+   Opacity alone, so the compositor handles it and no layout is asked for.
+
+   The selector is on the attribute and not on its value, so it also matches the
+   renamed "done" — which is how the panels are released, and this one used to
+   have no "done" counterpart at all. The wordmark therefore stayed at zero
+   through the whole landing, the overlay that was standing in for it unmounted
+   the instant the flight reported, and the app was left with no name in the
+   corner for the length of the settle timer, after which it faded in behind a
+   dashboard that had already arrived. That read as the name blinking out and
+   popping back. Releasing the brand on "done" puts it back in the frame that
+   hands over. */
+[data-nav-brand] {
+  transition: opacity var(--dur-2) var(--ease-out-quint);
+}
+
+[data-intro] [data-nav-brand] {
+  opacity: 0;
+}
+
+[data-intro="done"] [data-nav-brand] {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* The reveal starting state has to be undone, not merely made instant: JS
+     skips observing altogether under reduced motion, but a browser that flips
+     the preference mid-session could otherwise leave a panel at opacity 0. */
+  [data-reveal] {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  /* Same reasoning for the page fade, and it matters more here: an animation
+     left at its starting keyframe is a page stuck at zero opacity. */
+  [data-page-fade][data-entering] {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+}

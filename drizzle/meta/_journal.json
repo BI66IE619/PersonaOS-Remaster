@@ -1,0 +1,104 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1790798539012,
+      "tag": "0000_cultured_hammerhead",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790798539012,
+      "tag": "0001_row_level_security",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790798539013,
+      "tag": "0002_available_balance",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790798539014,
+      "tag": "0003_main_account",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790798539015,
+      "tag": "0004_mentor_sync",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790798539016,
+      "tag": "0005_mentor_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790798539017,
+      "tag": "0006_mentor_settings_drop",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790798539018,
+      "tag": "0007_plans_sync",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790798539019,
+      "tag": "0008_plans_event_position",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790798539020,
+      "tag": "0009_health_sleep_window",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790798539021,
+      "tag": "0010_journal_sync",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790798539022,
+      "tag": "0011_sports_sync",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790798539023,
+      "tag": "0012_strength_sync",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790798539024,
+      "tag": "0013_photo_storage",
+      "breakpoints": true
+    }
+  ]
+}

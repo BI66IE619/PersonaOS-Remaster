@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Posting the payload to the LifeOS server. The only network use. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!--
+      Health Connect permissions are declared here even though they are all
+      runtime permissions granted by the user. The manifest entry is what puts
+      the app in the list that appears when Health Connect shows its permission
+      screen; without it the request either fails outright or is granted for a
+      permission the user was never shown.
+
+      tools:targetApi is required because the health.* namespace only exists on
+      API 34 and up. On older devices these are unknown permissions, which the
+      platform ignores rather than failing on.
+    -->
+    <uses-permission
+        android:name="android.permission.health.READ_STEPS"
+        tools:targetApi="34" />
+    <uses-permission
+        android:name="android.permission.health.READ_HEART_RATE"
+        tools:targetApi="34" />
+    <uses-permission
+        android:name="android.permission.health.READ_RESTING_HEART_RATE"
+        tools:targetApi="34" />
+    <uses-permission
+        android:name="android.permission.health.READ_HEART_RATE_VARIABILITY_RMSSD"
+        tools:targetApi="34" />
+    <uses-permission
+        android:name="android.permission.health.READ_OXYGEN_SATURATION"
+        tools:targetApi="34" />
+    <uses-permission
+        android:name="android.permission.health.READ_RESPIRATORY_RATE"
+        tools:targetApi="34" />
+    <uses-permission
+        android:name="android.permission.health.READ_SLEEP"
+        tools:targetApi="34" />
+    <uses-permission
+        android:name="android.permission.health.READ_EXERCISE"
+        tools:targetApi="34" />
+    <uses-permission
+        android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED"
+        tools:targetApi="34" />
+    <uses-permission
+        android:name="android.permission.health.READ_DISTANCE"
+        tools:targetApi="34" />
+
+    <!--
+      Package visibility.
+
+      Since Android 11 an app cannot see other packages unless it declares an
+      intent or package query for them. Health Connect discovery asks the system
+      which Health Connect provider is installed and whether it is available;
+      on a Samsung phone that is com.samsung.android.health, and everywhere else
+      it is the Google Health Services package. Naming both keeps one APK working
+      on a Galaxy and on a Pixel instead of needing a build per manufacturer.
+
+      The second query is what makes the "why does this app need my health data"
+      rationale screen appear on Android 13+.
+    -->
+    <queries>
+        <package android:name="com.samsung.android.health" />
+        <package android:name="com.google.android.apps.healthdata" />
+        <intent>
+            <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+        </intent>
+    </queries>
+
+    <application
+        android:allowBackup="false"
+        android:icon="@android:drawable/ic_menu_save"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.Material.Light">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>

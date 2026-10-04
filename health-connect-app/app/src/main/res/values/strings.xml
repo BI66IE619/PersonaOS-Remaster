@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">LifeOS Health Bridge</string>
+    <string name="grant_permissions">Grant health permissions</string>
+    <string name="open_hc_settings">Open Health Connect settings</string>
+    <string name="sync_now">Sync now</string>
+</resources>

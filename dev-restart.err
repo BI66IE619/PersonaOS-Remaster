@@ -1,0 +1,108 @@
+[browser] Uncaught Error: Hydration failed because the server rendered text didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <LoadingBoundary name="body/" loading={null}>
+      <HTTPAccessFallbackBoundary notFound={undefined} forbidden={undefined} unauthorized={undefined}>
+        <RedirectBoundary>
+          <RedirectErrorBoundary router={{...}}>
+            <InnerLayoutRouter url="/body" tree={[...]} params={{}} cacheNode={{rsc:{...}, ...}} segmentPath={[...]} ...>
+              <SegmentViewNode type="page" pagePath="body/page.tsx">
+                <SegmentTrieNode>
+                <BodyPage>
+                  <BodyScreen view={{date:"2026...", ...}}>
+                    <PageShell current="/vitals">
+                      <AppNav>
+                      <div className="mx-auto w-...">
+                        <div>
+                        <main className="grid grid-...">
+                          <BodyPanel>
+                          <section className="lg:col-span-6">
+                            <StrengthLog date="2026-09-26">
+                              <div className="panel p-5">
+                                <div>
+                                <p className="mt-4 text-xs text-ink-3">
++                                 Add the movements you train, then swipe one across each time you do a set.
+-                                 Add the movements you train, then drag one across each time you do a set.
+                          ...
+              ...
+            ...
+
+    at <unknown> (https://react.dev/link/hydration-mismatch)
+    at p (<anonymous>)
+    at StrengthLog (src/components/strength-log.tsx:226:9)
+    at BodyScreen (src/components/body/body-screen.tsx:31:13)
+    at BodyPage (src\app\body\page.tsx:9:10)
+  224 |
+  225 |       {state.exercises.length === 0 ? (
+> 226 |         <p className="mt-4 text-xs text-ink-3">
+      |         ^
+  227 |           Add the movements you train, then drag one across each time you do a set.
+  228 |         </p>
+  229 |       ) : (
+[browser] Uncaught Error: Hydration failed because the server rendered text didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <LoadingBoundary name="body/" loading={null}>
+      <HTTPAccessFallbackBoundary notFound={undefined} forbidden={undefined} unauthorized={undefined}>
+        <RedirectBoundary>
+          <RedirectErrorBoundary router={{...}}>
+            <InnerLayoutRouter url="/body" tree={[...]} params={{}} cacheNode={{rsc:{...}, ...}} segmentPath={[...]} ...>
+              <SegmentViewNode type="page" pagePath="body/page.tsx">
+                <SegmentTrieNode>
+                <BodyPage>
+                  <BodyScreen view={{date:"2026...", ...}}>
+                    <PageShell current="/vitals">
+                      <AppNav>
+                      <div className="mx-auto w-...">
+                        <div>
+                        <main className="grid grid-...">
+                          <BodyPanel>
+                          <section className="lg:col-span-6">
+                            <StrengthLog date="2026-09-26">
+                              <div className="panel p-5">
+                                <div>
+                                <p className="mt-4 text-xs text-ink-3">
++                                 Add the movements you train, then swipe one across each time you do a set.
+-                                 Add the movements you train, then drag one across each time you do a set.
+                          ...
+              ...
+            ...
+
+    at <unknown> (https://react.dev/link/hydration-mismatch)
+    at p (<anonymous>)
+    at StrengthLog (src/components/strength-log.tsx:226:9)
+    at BodyScreen (src/components/body/body-screen.tsx:31:13)
+    at BodyPage (src\app\body\page.tsx:9:10)
+  224 |
+  225 |       {state.exercises.length === 0 ? (
+> 226 |         <p className="mt-4 text-xs text-ink-3">
+      |         ^
+  227 |           Add the movements you train, then drag one across each time you do a set.
+  228 |         </p>
+  229 |       ) : (
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[browser] You have Reduced Motion enabled on your device. Animations may not appear as expected.. For more information and steps for solving, visit https://motion.dev/troubleshooting/reduced-motion-disabled (src/components/radial-stat.tsx:42:35)
+[browser] You have Reduced Motion enabled on your device. Animations may not appear as expected.. For more information and steps for solving, visit https://motion.dev/troubleshooting/reduced-motion-disabled (src/components/radial-stat.tsx:42:35)
+[Server HMR] Update failed, full reload needed: SyntaxError: Identifier 'io' has already been declared
+    at eval (<anonymous>)
+[browser] You have Reduced Motion enabled on your device. Animations may not appear as expected.. For more information and steps for solving, visit https://motion.dev/troubleshooting/reduced-motion-disabled (src/components/radial-stat.tsx:42:35)
