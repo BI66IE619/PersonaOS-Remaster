@@ -19,6 +19,8 @@ export type HealthPayload = {
   sessions: Record<string, unknown>[];
   /** Per-metric read failures, present only when something went wrong. */
   debug?: string[];
+  /** Raw record counts per type, for diagnosing a device that reads nothing. */
+  probe?: Record<string, unknown>;
 };
 
 interface HealthConnectPlugin {
@@ -43,7 +45,7 @@ export function healthConnectAvailable(): boolean {
 }
 
 export type HealthSyncResult =
-  | { ok: true; daily: number; sessions: number; debug?: string[] }
+  | { ok: true; daily: number; sessions: number; debug?: string[]; probe?: Record<string, unknown> }
   | { ok: false; needsPermission?: boolean; error: string };
 
 /**
@@ -99,6 +101,7 @@ export async function syncHealthConnect(days = 30): Promise<HealthSyncResult> {
       daily: body.daily ?? data.daily.length,
       sessions: body.sessions ?? data.sessions.length,
       ...(data.debug && data.debug.length ? { debug: data.debug } : {}),
+      ...(data.probe ? { probe: data.probe } : {}),
     };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Health sync failed." };

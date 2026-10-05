@@ -234,6 +234,25 @@ class HealthConnectPlugin : Plugin() {
             debug.put("sleep: ${e.message}")
         }
 
+        /* A one-off diagnostic: how many raw records of each type exist in the
+           window at all. It separates "Health Connect has no sleep" from "the
+           aggregation of sleep is wrong", which look identical from the database. */
+        val probe = JSObject()
+        val winRange = TimeRangeFilter.between(
+            startDate.minusDays(1).atStartOfDay(zone).toInstant(),
+            endDate.plusDays(1).atStartOfDay(zone).toInstant(),
+        )
+        suspend fun count(name: String, body: suspend () -> Int) {
+            probe.put(name, try { body() } catch (e: Exception) { "err: ${e.message}" })
+        }
+        count("steps") { client.readRecords(ReadRecordsRequest(StepsRecord::class, winRange)).records.size }
+        count("sleep") { client.readRecords(ReadRecordsRequest(SleepSessionRecord::class, winRange)).records.size }
+        count("hrv") { client.readRecords(ReadRecordsRequest(HeartRateVariabilityRmssdRecord::class, winRange)).records.size }
+        count("restingHr") { client.readRecords(ReadRecordsRequest(RestingHeartRateRecord::class, winRange)).records.size }
+        count("heartRate") { client.readRecords(ReadRecordsRequest(HeartRateRecord::class, winRange)).records.size }
+        count("exercise") { client.readRecords(ReadRecordsRequest(ExerciseSessionRecord::class, winRange)).records.size }
+        count("activeKcal") { client.readRecords(ReadRecordsRequest(ActiveCaloriesBurnedRecord::class, winRange)).records.size }
+
         /* One row per local day, filled from a per-day aggregate. Aggregating a day at
            a time is more queries than one range aggregate, but a day is the unit the
            table stores and the only one that can be computed without the phone's
@@ -378,6 +397,7 @@ class HealthConnectPlugin : Plugin() {
         val ret = JSObject()
         ret.put("daily", daily)
         ret.put("sessions", sessions)
+        ret.put("probe", probe)
         if (debug.length() > 0) ret.put("debug", debug)
         /* Unused but proves the field is present if a future caller needs it. */
         ret.put("today", today.toString())

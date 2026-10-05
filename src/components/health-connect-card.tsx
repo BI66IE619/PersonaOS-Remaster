@@ -31,11 +31,12 @@ export function HealthConnectCard() {
     setBusy(false);
     if (result.ok) {
       const base = `Synced ${result.daily} day${result.daily === 1 ? "" : "s"} and ${result.sessions} workout${result.sessions === 1 ? "" : "s"}.`;
-      setMessage(
-        result.debug && result.debug.length
-          ? `${base} Some reads failed: ${result.debug.slice(0, 4).join(" | ")}`
-          : base,
-      );
+      const parts = [base];
+      if (result.debug && result.debug.length) parts.push(`Some reads failed: ${result.debug.slice(0, 4).join(" | ")}`);
+      /* Raw counts from the phone, so a device that reads nothing says what it
+         actually holds rather than leaving us to guess. */
+      if (result.probe) parts.push(`Health Connect records: ${JSON.stringify(result.probe)}`);
+      setMessage(parts.join("  •  "));
       /* The data lands on the server, so the server render has to run again for
          the panels above to show it. */
       router.refresh();
