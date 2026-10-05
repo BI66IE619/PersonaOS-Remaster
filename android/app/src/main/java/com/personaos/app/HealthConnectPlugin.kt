@@ -180,6 +180,9 @@ class HealthConnectPlugin : Plugin() {
 
         val daily = JSArray()
         val sessions = JSArray()
+        /* Anything that failed to read, surfaced to the app so a silent null is
+           never mistaken for "no data". */
+        val debug = JSArray()
 
         /* One row per local day, filled from a per-day aggregate. Aggregating a day at
            a time is more queries than one range aggregate, but a day is the unit the
@@ -197,39 +200,55 @@ class HealthConnectPlugin : Plugin() {
             row.put("origin", "health-connect")
             row.put("updatedAt", Instant.now().toString())
 
+            /* Each metric is its own aggregate call. One combined request means a
+               single unsupported or ungranted metric blanks the whole day, and the
+               day still counts as "synced", which is exactly the failure that looks
+               like nothing happened. Separate calls cost a few more queries and
+               isolate the damage, and the catch names what failed. */
             try {
-                val agg = client.aggregate(
-                    AggregateRequest(
-                        metrics = setOf(
-                            StepsRecord.COUNT_TOTAL,
-                            ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL,
-                            TotalCaloriesBurnedRecord.ENERGY_TOTAL,
-                            DistanceRecord.DISTANCE_TOTAL,
-                            RestingHeartRateRecord.BPM_AVG,
-                        ),
-                        timeRangeFilter = range,
-                    ),
-                )
-                agg[StepsRecord.COUNT_TOTAL]?.let { row.put("steps", it) }
-                agg[ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL]
+                client.aggregate(AggregateRequest(setOf(StepsRecord.COUNT_TOTAL), range))[StepsRecord.COUNT_TOTAL]
+                    ?.let { row.put("steps", it) }
+            } catch (e: Exception) {
+                debug.put("$day steps: ${e.message}")
+            }
+            try {
+                client.aggregate(AggregateRequest(setOf(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL), range))[ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL]
                     ?.let { row.put("activeKcal", it.inKilocalories) }
-                agg[TotalCaloriesBurnedRecord.ENERGY_TOTAL]
+            } catch (e: Exception) {
+                debug.put("$day activeKcal: ${e.message}")
+            }
+            try {
+                client.aggregate(AggregateRequest(setOf(TotalCaloriesBurnedRecord.ENERGY_TOTAL), range))[TotalCaloriesBurnedRecord.ENERGY_TOTAL]
                     ?.let { row.put("totalKcal", it.inKilocalories) }
-                agg[DistanceRecord.DISTANCE_TOTAL]?.let { row.put("distanceM", it.inMeters) }
-                agg[RestingHeartRateRecord.BPM_AVG]?.let { row.put("restingHr", it.toInt()) }
-            } catch (_: Exception) {
-                /* A day with no data of a type is normal; the row still carries the
-                   ones that did resolve. */
+            } catch (e: Exception) {
+                debug.put("$day totalKcal: ${e.message}")
+            }
+            try {
+                client.aggregate(AggregateRequest(setOf(DistanceRecord.DISTANCE_TOTAL), range))[DistanceRecord.DISTANCE_TOTAL]
+                    ?.let { row.put("distanceM", it.inMeters) }
+            } catch (e: Exception) {
+                debug.put("$day distanceM: ${e.message}")
+            }
+            try {
+                client.aggregate(AggregateRequest(setOf(RestingHeartRateRecord.BPM_AVG), range))[RestingHeartRateRecord.BPM_AVG]
+                    ?.let { row.put("restingHr", it.toInt()) }
+            } catch (e: Exception) {
+                debug.put("$day restingHr: ${e.message}")
             }
 
             /* Sleep is attributed to the day it ended on — the night you wake up on is
                the day the sleep belongs to. */
-            val nights = client.readRecords(
-                ReadRecordsRequest(
-                    recordType = SleepSessionRecord::class,
-                    timeRangeFilter = TimeRangeFilter.between(dayStart, dayEnd),
-                ),
-            ).records
+            val nights = try {
+                client.readRecords(
+                    ReadRecordsRequest(
+                        recordType = SleepSessionRecord::class,
+                        timeRangeFilter = TimeRangeFilter.between(dayStart, dayEnd),
+                    ),
+                ).records
+            } catch (e: Exception) {
+                debug.put("$day sleep: ${e.message}")
+                emptyList()
+            }
             if (nights.isNotEmpty()) {
                 var total = 0L
                 var deep = 0L
@@ -299,8 +318,8 @@ class HealthConnectPlugin : Plugin() {
                 agg[DistanceRecord.DISTANCE_TOTAL]?.let { row.put("distanceM", it.inMeters) }
                 agg[HeartRateRecord.BPM_AVG]?.let { row.put("avgHr", it.toInt()) }
                 agg[HeartRateRecord.BPM_MAX]?.let { row.put("maxHr", it.toInt()) }
-            } catch (_: Exception) {
-                /* No heart rate or distance for this session is normal. */
+            } catch (e: Exception) {
+                debug.put("session ${s.metadata.id}: ${e.message}")
             }
             sessions.put(row)
         }
@@ -308,6 +327,7 @@ class HealthConnectPlugin : Plugin() {
         val ret = JSObject()
         ret.put("daily", daily)
         ret.put("sessions", sessions)
+        if (debug.length() > 0) ret.put("debug", debug)
         /* Unused but proves the field is present if a future caller needs it. */
         ret.put("today", today.toString())
         return ret

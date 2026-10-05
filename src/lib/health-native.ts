@@ -17,6 +17,8 @@ import { addDays, dayKey } from "@/lib/dates";
 export type HealthPayload = {
   daily: Record<string, unknown>[];
   sessions: Record<string, unknown>[];
+  /** Per-metric read failures, present only when something went wrong. */
+  debug?: string[];
 };
 
 interface HealthConnectPlugin {
@@ -41,7 +43,7 @@ export function healthConnectAvailable(): boolean {
 }
 
 export type HealthSyncResult =
-  | { ok: true; daily: number; sessions: number }
+  | { ok: true; daily: number; sessions: number; debug?: string[] }
   | { ok: false; needsPermission?: boolean; error: string };
 
 /**
@@ -96,6 +98,7 @@ export async function syncHealthConnect(days = 30): Promise<HealthSyncResult> {
       ok: true,
       daily: body.daily ?? data.daily.length,
       sessions: body.sessions ?? data.sessions.length,
+      ...(data.debug && data.debug.length ? { debug: data.debug } : {}),
     };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Health sync failed." };

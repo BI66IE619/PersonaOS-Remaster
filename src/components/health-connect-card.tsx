@@ -30,8 +30,11 @@ export function HealthConnectCard() {
     const result = await syncHealthConnect(30);
     setBusy(false);
     if (result.ok) {
+      const base = `Synced ${result.daily} day${result.daily === 1 ? "" : "s"} and ${result.sessions} workout${result.sessions === 1 ? "" : "s"}.`;
       setMessage(
-        `Synced ${result.daily} day${result.daily === 1 ? "" : "s"} and ${result.sessions} workout${result.sessions === 1 ? "" : "s"}.`,
+        result.debug && result.debug.length
+          ? `${base} Some reads failed: ${result.debug.slice(0, 4).join(" | ")}`
+          : base,
       );
       /* The data lands on the server, so the server render has to run again for
          the panels above to show it. */
