@@ -1,9 +1,10 @@
-import { CATEGORIES, generateTransactions } from "./seed";
-import { dayKey, monthKey } from "@/lib/dates";
+import { CATEGORIES } from "./seed";
+import { dayKey } from "@/lib/dates";
 import type { MoneyView, Transaction } from "./types";
 
-/** Pure aggregation. Shared by the mock provider and the browser, so the
-    localStorage overlay and the server path can never disagree. */
+/** Pure aggregation. The one place a set of transactions becomes a month's view,
+    so every caller — the page, the route and the screens — computes the same
+    figures the same way. */
 export function buildMoneyView(all: Transaction[], month: string): MoneyView {
   const inMonth = all.filter((t) => t.date.startsWith(month));
 
@@ -82,13 +83,6 @@ export function buildMoneyView(all: Transaction[], month: string): MoneyView {
 function monthLastDay(month: string): string {
   const [y, m] = month.split("-").map(Number);
   return `${month}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`;
-}
-
-/** The swap point for money, mirroring getProvider() for the health side. */
-export class FinanceMockProvider {
-  async getMonth(ref: Date = new Date()) {
-    return buildMoneyView(generateTransactions(ref), monthKey(ref));
-  }
 }
 
 export { dayKey };

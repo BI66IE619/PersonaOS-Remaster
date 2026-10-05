@@ -6,7 +6,6 @@ import { getMentorChats, getMentorSettings, requireUserId } from "@/lib/dal";
 import type { MentorSettingsPayload } from "@/lib/mentor/types";
 import { loadMoney } from "@/lib/finance/money-data";
 import { buildMoneyView } from "@/lib/finance/view";
-import { generateTransactions } from "@/lib/finance/seed";
 import { monthKey } from "@/lib/dates";
 
 // Reads "now", so it must never be prerendered into a frozen day at build time.
@@ -93,7 +92,9 @@ export default async function MentorPage() {
      * marked insufficient, so it hedged around numbers that were not the user's
      * at all. */
   const month = monthKey(new Date());
-  let money = await generatedMoney(month);
+  /* An empty month, not an invented one. The mentor is told whether the figures
+     are real; when no bank is linked there are simply none. */
+  let money = buildMoneyView([], month);
   /* Whether the figures above are the user's own or placeholders. The brief says so
      in words, and it must be able to: the mentor is told not to treat placeholder
      money as real, and it can only do that if it knows which it is looking at. */
@@ -131,9 +132,4 @@ export default async function MentorPage() {
       />
     </>
   );
-}
-
-/** Placeholder figures for a month with no linked account. */
-async function generatedMoney(month: string) {
-  return buildMoneyView(generateTransactions(new Date(`${month}-15T12:00:00Z`)), month);
 }

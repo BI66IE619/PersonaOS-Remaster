@@ -1,6 +1,5 @@
 import { createStore } from "@/lib/create-store";
-import { normalizeCategory, normalizeTaskCategory, type CalCategory, type TaskCategory } from "@/lib/categories";
-import { addDays } from "@/lib/dates";
+import { normalizeCategory, normalizeTaskCategory, type TaskCategory } from "@/lib/categories";
 import { EMPTY_TASKS, type CalEvent, type Task, type TasksState } from "@/lib/types-tasks";
 
 const KEY = "personaos:tasks";
@@ -394,85 +393,6 @@ export function taskPayload(t: Task, position: number) {
 /* --------------------------------------------------------------------------
  * The store's exported callers.
  * ------------------------------------------------------------------------ */
-
-/** First run gets a little sample content so the calendar is not an empty
-    grid. Any real edit drops it, so this never lingers in the way. */
-function seed(state: TasksState, today: string): TasksState {
-  if (state.seeded || state.events.length || state.tasks.length) {
-    return state.seeded ? state : { ...state, seeded: true };
-  }
-  const stamp = new Date().toISOString();
-  const ev = (
-    title: string,
-    offset: number,
-    startMin: number | null,
-    durationMin: number | null = null,
-    category: CalCategory = "other",
-    sport = false,
-  ): CalEvent => ({
-    id: uid(),
-    title,
-    date: addDays(today, offset),
-    startMin,
-    durationMin,
-    note: "",
-    category,
-    sport,
-    updatedAt: stamp,
-  });
-
-  return {
-    ...state,
-    seeded: true,
-    events: [
-      ev("Team training", 0, 1020, 90, "extracurriculars", true),
-      ev("Dentist", 2, 570, 60, "personal"),
-      ev("Call Dad", 4, 1140, 30, "personal"),
-      ev("Soccer practice", 6, 1020, 90, "extracurriculars", true),
-      ev("Renew passport", 11, null, null, "other"),
-      ev("Dentist", 23, 570, 60, "personal"),
-      ev("Book flights", -3, null, null, "work"),
-      /* Spread across the week so every category is visible on the grid. */
-      ev("Lab report due", 1, 1500, 60, "academics"),
-      ev("Shift at the shop", 3, 960, 300, "work"),
-      ev("Guitar lesson", 5, 1020, 45, "extracurriculars"),
-    ],
-    tasks: [
-      { id: uid(), title: "Return library books", due: addDays(today, 1), done: false, createdAt: stamp, updatedAt: stamp, note: "", category: "personal" },
-      { id: uid(), title: "Email coach about Thursday", due: today, done: false, createdAt: stamp, updatedAt: stamp, note: "", category: "personal" },
-      { id: uid(), title: "Refill prescription", due: addDays(today, -2), done: false, createdAt: stamp, updatedAt: stamp, note: "", category: "personal" },
-      { id: uid(), title: "Someday: learn to make ramen", due: null, done: false, createdAt: stamp, updatedAt: stamp, note: "", category: "other" },
-      { id: uid(), title: "Check in with Priya", due: addDays(today, 3), done: true, createdAt: stamp, updatedAt: stamp, note: "", category: "personal" },
-      { id: uid(), title: "History essay outline", due: addDays(today, 2), done: false, createdAt: stamp, updatedAt: stamp, note: "", category: "assignments" },
-      { id: uid(), title: "Finish calc problem set", due: today, done: false, createdAt: stamp, updatedAt: stamp, note: "", category: "assignments" },
-      { id: uid(), title: "Read ahead for lab", due: addDays(today, 5), done: false, createdAt: stamp, updatedAt: stamp, note: "", category: "other" },
-    ],
-  };
-}
-
-function commit(next: TasksState) {
-  store.set(next);
-}
-
-export function seedSample(today: string) {
-  /* Not for a bound account. The samples are a first-run affordance for a local
-     record, and the moment this record belongs to a real person they would be
-     pushed to their server and appear on their other devices as a calendar and a
-     task list they never wrote. A new account starts empty, which is the honest
-     version of its plan. The `owner` check is the test: null means nobody has
-     claimed this record. */
-  if (store.getSnapshot().owner !== null) return;
-  /* Written only when the seed actually changes something, which is the same
-     guard seedStrength uses and for the same reason. HomeScreen calls this on
-     every mount, and an unconditional commit means a localStorage write and a
-     subscriber notification on every single visit to Home — for a value that
-     seed() hands back by reference when the data is already there. That was
-     worth a 66ms task on the frame a navigation was trying to paint into, once
-     per tab switch, forever, to re-serialise data that had not changed. */
-  const current = store.getSnapshot();
-  const next = seed(current, today);
-  if (next !== current) commit(next);
-}
 
 export function addEvent(input: Omit<CalEvent, "id" | "updatedAt">) {
   store.update((s) => putEvent(s, input));

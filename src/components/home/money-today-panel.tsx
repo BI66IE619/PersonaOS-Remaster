@@ -59,7 +59,7 @@ export function MoneyTodayPanel({
       <div className="flex items-baseline justify-between gap-3">
         <span className="label-xs shrink-0">Money today</span>
         {!linked && (
-          <span className="num shrink-0 text-[10px] text-ink-3">sample</span>
+          <span className="num shrink-0 text-[10px] text-ink-3">no bank linked</span>
         )}
       </div>
 
@@ -68,7 +68,7 @@ export function MoneyTodayPanel({
           {cents(todaySpendCents)}
         </span>
         <span className="num shrink-0 text-xs text-ink-3">
-          {!linked ? "sample" : todaySpendCents === 0 ? "nothing spent" : "spent today"}
+          {!linked ? "not linked" : todaySpendCents === 0 ? "nothing spent" : "spent today"}
         </span>
       </div>
 
@@ -138,13 +138,11 @@ export function MoneyTodayPanel({
 
       <div className="mt-4 grid grid-cols-2 gap-2 lg:mt-auto">
         <div className="tile px-3 py-2.5">
-          <div className="text-[10px] text-ink-3">
-            {linked ? "This month" : "This month · sample"}
-          </div>
+          <div className="text-[10px] text-ink-3">{linked ? "This month" : "This month · no bank"}</div>
           <div className="num mt-1 text-[15px] font-medium">{cents(spentCents)}</div>
         </div>
         <div className="tile px-3 py-2.5">
-          <div className="text-[10px] text-ink-3">{linked ? "Balance" : "Balance · sample"}</div>
+          <div className="text-[10px] text-ink-3">{linked ? "Balance" : "Balance · no bank"}</div>
           <div className="num mt-1 text-[15px] font-medium">{cents(balanceCents)}</div>
         </div>
       </div>

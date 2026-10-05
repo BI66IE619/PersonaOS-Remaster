@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { PageShell } from "@/components/page-shell";
 import { EmptyState } from "@/components/empty-state";
 import { addDays, shortDayLabel } from "@/lib/dates";
@@ -15,7 +15,6 @@ import {
   removeEntry,
   saveEntry,
   searchEntries,
-  seedNotes,
   snippet,
   subscribe,
 } from "@/lib/notes";
@@ -33,11 +32,6 @@ export function NotesScreen({ today }: { today: string }) {
   const [tagDraft, setTagDraft] = useState("");
   const [query, setQuery] = useState("");
   const [tag, setTag] = useState<string | null>(null);
-
-  /* First run gets a short archive so the panel is not an empty list. */
-  useEffect(() => {
-    seedNotes(today);
-  }, [today]);
 
   const stored = byDate(state.entries, date);
   const entry = draft?.date === date ? draft : stored;

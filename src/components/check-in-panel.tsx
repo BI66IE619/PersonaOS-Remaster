@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { addDays, shortDayLabel } from "@/lib/dates";
 import {
   byDate,
@@ -9,7 +9,6 @@ import {
   getSnapshot,
   removeCheckIn,
   saveCheckIn,
-  seedCheckIns,
   subscribe,
 } from "@/lib/checkins";
 import type { CheckIn } from "@/lib/types";
@@ -37,10 +36,6 @@ export function CheckInPanel({ today }: { today: string }) {
   const state = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   const [draft, setDraft] = useState<CheckIn | null>(null);
   const [saved, setSaved] = useState(false);
-
-  useEffect(() => {
-    seedCheckIns(today);
-  }, [today]);
 
   const stored = byDate(state.entries, today);
   /* Nothing is ever filled in for the user. The scales start blank on a day they

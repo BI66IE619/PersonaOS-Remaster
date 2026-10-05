@@ -8,13 +8,11 @@ import { HabitList } from "@/components/tasks/habit-list";
 import {
   applyRemote,
   getSnapshot,
-  seedSample,
   subscribe,
 } from "@/lib/tasks";
 import {
   applyRemote as applyRemoteHabits,
   getSnapshot as habitsSnapshot,
-  seedHabits,
   subscribe as subscribeHabits,
 } from "@/lib/habits";
 import { EMPTY_TASKS } from "@/lib/types-tasks";
@@ -67,18 +65,6 @@ export function TasksScreen({
     applyRemote({ events: initialEvents, tasks: initialTasks, deleted: [] });
     applyRemoteHabits({ habits: initialHabits, deleted: [] });
   }, [initialEvents, initialTasks, initialHabits]);
-
-  /* First run gets sample content, otherwise the month grid is an empty rectangle and
-     you cannot judge the layout before adding anything.
-   *
-   * Both seeders are no-ops for a bound account: the samples are a first-run
-   * affordance for a record nobody owns, and pushing them to a real account would put
-   * a calendar, a task list and four habits on that person's other devices that they
-   * never chose. */
-  useEffect(() => {
-    seedSample(view.date);
-    seedHabits(view.date);
-  }, [view.date]);
 
   return (
     <PageShell>

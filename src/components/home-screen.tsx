@@ -11,8 +11,6 @@ import { HabitsTodayPanel } from "@/components/home/habits-today-panel";
 import { LoggedTodayPanel } from "@/components/home/logged-today-panel";
 import { MoneyTodayPanel, type TodayMoney } from "@/components/home/money-today-panel";
 import { VitalityTrendPanel } from "@/components/vitality-trend-panel";
-import { seedSample } from "@/lib/tasks";
-import { seedHabits } from "@/lib/habits";
 import { seedStrength } from "@/lib/strength";
 import type { TodayView } from "@/lib/types";
 
@@ -46,15 +44,12 @@ export function HomeScreen({
   money: TodayMoney;
   welcome: string;
 }) {
-  /* First run gets sample content, otherwise the agenda and habits panels are
-     empty rectangles and you cannot judge the layout before adding anything.
-     The strength programme is installed for the same reason: it is what the
-     workout row on Habits today is measured against. */
+  /* The lifting programme installs itself on first run — that is app setup, not
+     sample data. Everything else starts empty: no invented tasks, no invented
+     habits, no invented anything. */
   useEffect(() => {
-    seedSample(view.date);
-    seedHabits(view.date);
     seedStrength();
-  }, [view.date]);
+  }, []);
 
   return (
     <PageShell>

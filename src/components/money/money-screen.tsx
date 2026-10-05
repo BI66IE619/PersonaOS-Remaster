@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { CATEGORIES, generateTransactions } from "@/lib/finance/seed";
+import { CATEGORIES } from "@/lib/finance/seed";
 import { buildMoneyView } from "@/lib/finance/view";
 import { addMonths, monthLabel, monthKey, shortDayLabel } from "@/lib/dates";
 import { formatMoney } from "@/lib/format";
@@ -196,16 +196,9 @@ export function MoneyScreen({ now, initial }: { now: string; initial: MoneyData 
   /* The seed stands in only when no bank is linked. It is never blended with real
      rows: a ledger where some numbers are invented is worse than an obviously
      fake one. */
-  const isCurrentMonth = month === monthKey(ref);
-
-  /* The seed is generated relative to today, so it can only stand in for the
-     current month. Reusing it for a month further back would fabricate a history
-     the generator never produced — the month would show invented transactions
-     under a "past" badge, which is the same class of bug as an empty-looking
-     month that is actually full. Past months stay empty instead. */
-  const seedView = buildMoneyView(generateTransactions(ref), month);
-  const useSeed = !data.linked && isCurrentMonth;
-  const shown = data.linked && data.view ? data.view : useSeed ? seedView : EMPTY_VIEW(month);
+  /* No linked bank means no ledger. This used to fall back to a generated month
+     so the layout had something to show, which read as the user's own spending. */
+  const shown = data.linked && data.view ? data.view : EMPTY_VIEW(month);
 
   const mainName = data.accounts.find((a) => a.isMain)?.name ?? null;
 
@@ -426,9 +419,9 @@ export function MoneyScreen({ now, initial }: { now: string; initial: MoneyData 
               </p>
             ) : (
               <p className="mt-3 text-sm text-ink-2">
-                Everything shown here is generated. Paste a SimpleFIN token and the real
-                transactions replace it — it is exchanged once on the server and never
-                stored in this browser.
+                No bank linked, so there is nothing to show. Paste a SimpleFIN token
+                and the real transactions appear — it is exchanged once on the server
+                and never stored in this browser.
               </p>
             )}
           </div>

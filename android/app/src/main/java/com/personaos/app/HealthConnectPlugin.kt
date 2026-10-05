@@ -10,6 +10,8 @@ import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
 import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.HeartRateRecord
+import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
+import androidx.health.connect.client.records.OxygenSaturationRecord
 import androidx.health.connect.client.records.RestingHeartRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
@@ -47,6 +49,17 @@ import java.time.ZoneId
  * The window is passed in as two day keys and interpreted in the phone's own timezone,
  * because a "day" of steps is a local-calendar day, not a UTC one.
  */
+/** One night's totals, accumulated across every sleep session that ended on the
+ *  same local day. */
+private class SleepAggregate {
+    var totalSec = 0L
+    var deepSec = 0L
+    var remSec = 0L
+    var lightSec = 0L
+    var start: Instant? = null
+    var end: Instant? = null
+}
+
 @CapacitorPlugin(name = "HealthConnect")
 class HealthConnectPlugin : Plugin() {
 
@@ -64,6 +77,8 @@ class HealthConnectPlugin : Plugin() {
         HealthPermission.getReadPermission(TotalCaloriesBurnedRecord::class),
         HealthPermission.getReadPermission(DistanceRecord::class),
         HealthPermission.getReadPermission(ExerciseSessionRecord::class),
+        HealthPermission.getReadPermission(HeartRateVariabilityRmssdRecord::class),
+        HealthPermission.getReadPermission(OxygenSaturationRecord::class),
     )
 
     private fun client(): HealthConnectClient = HealthConnectClient.getOrCreate(context)
@@ -184,6 +199,41 @@ class HealthConnectPlugin : Plugin() {
            never mistaken for "no data". */
         val debug = JSArray()
 
+        /* Sleep is read once for the whole window and bucketed by the day each night
+           ended on — the night you wake up on is the day the sleep belongs to. A
+           per-day read misses a night that starts before midnight, because a day's
+           range begins at 00:00 and the session that matters mostly began the evening
+           before. */
+        val sleepByDay = HashMap<LocalDate, SleepAggregate>()
+        try {
+            val nights = client.readRecords(
+                ReadRecordsRequest(
+                    recordType = SleepSessionRecord::class,
+                    timeRangeFilter = TimeRangeFilter.between(
+                        startDate.minusDays(1).atStartOfDay(zone).toInstant(),
+                        endDate.plusDays(1).atStartOfDay(zone).toInstant(),
+                    ),
+                ),
+            ).records
+            for (night in nights) {
+                val wakeDay = night.endTime.atZone(zone).toLocalDate()
+                val agg = sleepByDay.getOrPut(wakeDay) { SleepAggregate() }
+                agg.totalSec += night.endTime.epochSecond - night.startTime.epochSecond
+                if (agg.start == null || night.startTime < agg.start!!) agg.start = night.startTime
+                if (agg.end == null || night.endTime > agg.end!!) agg.end = night.endTime
+                for (stage in night.stages) {
+                    val sec = stage.endTime.epochSecond - stage.startTime.epochSecond
+                    when (stage.stage) {
+                        SleepSessionRecord.STAGE_TYPE_DEEP -> agg.deepSec += sec
+                        SleepSessionRecord.STAGE_TYPE_REM -> agg.remSec += sec
+                        SleepSessionRecord.STAGE_TYPE_LIGHT -> agg.lightSec += sec
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            debug.put("sleep: ${e.message}")
+        }
+
         /* One row per local day, filled from a per-day aggregate. Aggregating a day at
            a time is more queries than one range aggregate, but a day is the unit the
            table stores and the only one that can be computed without the phone's
@@ -236,45 +286,46 @@ class HealthConnectPlugin : Plugin() {
                 debug.put("$day restingHr: ${e.message}")
             }
 
-            /* Sleep is attributed to the day it ended on — the night you wake up on is
-               the day the sleep belongs to. */
-            val nights = try {
-                client.readRecords(
+            /* HRV and SpO2 have no aggregate metric in this client, so they are read
+               as records and averaged. HRV RMSSD feeds the readiness baseline, so a
+               day without it cannot be scored at all. */
+            try {
+                val hrv = client.readRecords(
                     ReadRecordsRequest(
-                        recordType = SleepSessionRecord::class,
-                        timeRangeFilter = TimeRangeFilter.between(dayStart, dayEnd),
+                        recordType = HeartRateVariabilityRmssdRecord::class,
+                        timeRangeFilter = range,
                     ),
                 ).records
-            } catch (e: Exception) {
-                debug.put("$day sleep: ${e.message}")
-                emptyList()
-            }
-            if (nights.isNotEmpty()) {
-                var total = 0L
-                var deep = 0L
-                var rem = 0L
-                var light = 0L
-                var earliest: Instant? = null
-                var latest: Instant? = null
-                for (night in nights) {
-                    total += night.endTime.epochSecond - night.startTime.epochSecond
-                    if (earliest == null || night.startTime < earliest) earliest = night.startTime
-                    if (latest == null || night.endTime > latest) latest = night.endTime
-                    for (stage in night.stages) {
-                        val mins = (stage.endTime.epochSecond - stage.startTime.epochSecond) / 60
-                        when (stage.stage) {
-                            SleepSessionRecord.STAGE_TYPE_DEEP -> deep += mins
-                            SleepSessionRecord.STAGE_TYPE_REM -> rem += mins
-                            SleepSessionRecord.STAGE_TYPE_LIGHT -> light += mins
-                        }
-                    }
+                if (hrv.isNotEmpty()) {
+                    row.put("hrvRmssd", hrv.sumOf { it.heartRateVariabilityMillis } / hrv.size)
                 }
-                row.put("sleepTotalMin", total / 60)
-                if (deep > 0) row.put("sleepDeepMin", deep)
-                if (rem > 0) row.put("sleepRemMin", rem)
-                if (light > 0) row.put("sleepLightMin", light)
-                earliest?.let { row.put("sleepStartUtc", it.toString()) }
-                latest?.let { row.put("sleepEndUtc", it.toString()) }
+            } catch (e: Exception) {
+                debug.put("$day hrv: ${e.message}")
+            }
+            try {
+                val spo2 = client.readRecords(
+                    ReadRecordsRequest(
+                        recordType = OxygenSaturationRecord::class,
+                        timeRangeFilter = range,
+                    ),
+                ).records
+                if (spo2.isNotEmpty()) {
+                    row.put("spo2", spo2.sumOf { it.percentage.value } / spo2.size)
+                }
+            } catch (e: Exception) {
+                debug.put("$day spo2: ${e.message}")
+            }
+
+            /* Sleep, from the whole-window bucket built above. */
+            sleepByDay[day]?.let { sleep ->
+                if (sleep.totalSec > 0) {
+                    row.put("sleepTotalMin", sleep.totalSec / 60)
+                    if (sleep.deepSec > 0) row.put("sleepDeepMin", sleep.deepSec / 60)
+                    if (sleep.remSec > 0) row.put("sleepRemMin", sleep.remSec / 60)
+                    if (sleep.lightSec > 0) row.put("sleepLightMin", sleep.lightSec / 60)
+                }
+                sleep.start?.let { row.put("sleepStartUtc", it.toString()) }
+                sleep.end?.let { row.put("sleepEndUtc", it.toString()) }
             }
 
             daily.put(row)

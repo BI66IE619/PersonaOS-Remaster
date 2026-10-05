@@ -20,7 +20,7 @@ import {
   getWeightLog,
   requireUserId,
 } from "../dal";
-import { MockProvider } from "./mock";
+import { emptyTodayView } from "./empty";
 
 /**
  * Vitality from Health Connect, through the same scoring the mock used.
@@ -146,13 +146,11 @@ function hasStage(m: MergedDay) {
  */
 export class SyncProvider implements DataProvider {
   async getToday(): Promise<TodayView> {
-    const mock = new MockProvider();
-
     let userId: string;
     try {
       userId = await requireUserId();
     } catch (e) {
-      if (e instanceof Unauthenticated) return mock.getToday();
+      if (e instanceof Unauthenticated) return emptyTodayView();
       throw e;
     }
 
@@ -167,7 +165,10 @@ export class SyncProvider implements DataProvider {
       getProfile(userId),
       getWeightLog(userId, addDays(today, -BODY_WINDOW_DAYS)),
     ]);
-    if (rows.length === 0) return mock.getToday();
+    const tz = profile?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+    /* No real readings yet: show nothing rather than an invented day. */
+    if (rows.length === 0) return emptyTodayView(now, tz);
 
     const body = buildBody(weightLog, today);
 
@@ -188,10 +189,10 @@ export class SyncProvider implements DataProvider {
       .filter((d): d is DayRecord => d !== null);
 
     /* A single night leaves every baseline with a standard deviation over an empty
-       sample and a z-score of pure noise. Anything short of two nights is better
-       served by the mock's 120 than by a readiness score the app cannot stand
-       behind. */
-    if (history.length < 2) return mock.getToday();
+       sample and a z-score of pure noise, so a score off anything less than two is
+       not one the app can stand behind. Show the empty view rather than a number
+       the app cannot defend. */
+    if (history.length < 2) return emptyTodayView(now, tz);
 
     const baselines = computeBaselines(history);
     const signals = computeSignals(history, baselines);

@@ -1,5 +1,5 @@
 import { createStore } from "@/lib/create-store";
-import { addDays, dayKey } from "@/lib/dates";
+import { dayKey } from "@/lib/dates";
 import { MAX_PENDING_DELETES, reviveIds, stampAfter } from "@/lib/sync-stamp";
 import type { JournalEntry } from "@/lib/types";
 
@@ -14,7 +14,6 @@ import type { JournalEntry } from "@/lib/types";
  * wins. It also means a delete is a tombstone for a date, not for a random id.
  */
 const KEY = "personaos:notes";
-const LEGACY_KEY = "personaos:journal";
 
 const isStr = (v: unknown): v is string => typeof v === "string";
 const isDay = (v: unknown): v is string => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
@@ -250,58 +249,6 @@ export function removeEntry(date: string) {
   const s = store.getSnapshot();
   if (!s.entries.some((e) => e.date === date)) return;
   store.set(withTombstone(s, date, s.entries.filter((e) => e.date !== date)));
-}
-
-const SEED_NOTES: { back: number; note: string }[] = [
-  { back: 1, note: "Essay outline: three claims, evidence for each, then the counter-argument. Do the counter-argument first while it's fresh." },
-  { back: 2, note: "Idea: a study app that shows one task, not a list. Everything else stays hidden until you finish this one." },
-  { back: 4, note: "Remember to email the coach about Saturday. Ask whether the meet moves to 9 or stays at 10." },
-  { back: 6, note: "The reading list is long enough to be its own project. Cut it to the four sources I actually need." },
-  { back: 9, note: "If sleep is the thing that actually controls the rest, then everything else is downstream of bedtime. Worth testing properly." },
-  { back: 13, note: "Nothing urgent today. Let it be that." },
-];
-
-/**
- * First run gets a short archive, so the history panel is legible before you
- * have written anything. Only past days are seeded: today is left blank so the
- * composer never arrives pre-filled with something you did not write.
- */
-function seed(state: NotesState, today: string): NotesState {
-  if (state.seeded || state.entries.length) {
-    return state.seeded ? state : { ...state, seeded: true };
-  }
-
-  /* Carry over any text the old check-in may have left behind. Its scales move
-     to the check-in log; only the writing belongs here. */
-  let carried: StoredNote | null = null;
-  try {
-    const raw = localStorage.getItem(LEGACY_KEY);
-    if (raw) carried = normalizeEntry(JSON.parse(raw));
-  } catch {
-    carried = null;
-  }
-
-  const stamp = new Date().toISOString();
-  const seeded = SEED_NOTES.map((n) => ({
-    date: addDays(today, -n.back),
-    note: n.note,
-    tags: [],
-    updatedAt: stamp,
-  }));
-
-  const merged = [...seeded, ...(carried ? [carried] : [])]
-    .filter((e) => e.date < today)
-    .sort(sortDesc);
-
-  return { ...state, seeded: true, entries: merged };
-}
-
-export function seedNotes(today: string) {
-  /* Not for a bound account: the samples are a first-run affordance for a local
-     record, and pushing them to a real account would put six notes the user
-     never wrote onto their other devices. */
-  if (store.getSnapshot().owner !== null) return;
-  store.set(seed(store.getSnapshot(), today));
 }
 
 export function clearNotes() {

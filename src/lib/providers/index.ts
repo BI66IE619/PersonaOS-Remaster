@@ -19,5 +19,4 @@ export function getProvider(): DataProvider {
   return new SyncProvider();
 }
 
-export { MockProvider } from "./mock";
 export { SyncProvider } from "./sync";

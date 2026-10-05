@@ -1,5 +1,5 @@
 import { createStore } from "@/lib/create-store";
-import { addDays, dayKey } from "@/lib/dates";
+import { dayKey } from "@/lib/dates";
 import { MAX_PENDING_DELETES, reviveIds, stampAfter } from "@/lib/sync-stamp";
 import type { CheckIn } from "@/lib/types";
 
@@ -13,7 +13,6 @@ import type { CheckIn } from "@/lib/types";
  * rather than by which one reached the server first.
  */
 const KEY = "personaos:checkins";
-const LEGACY_KEY = "personaos:journal";
 
 const isStr = (v: unknown): v is string => typeof v === "string";
 const isDay = (v: unknown): v is string => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
@@ -151,62 +150,6 @@ export function removeCheckIn(date: string) {
   const s = store.getSnapshot();
   if (!s.entries.some((e) => e.date === date)) return;
   store.set(withTombstone(s, date, s.entries.filter((e) => e.date !== date)));
-}
-
-const SEED: { back: number; energy: number; mood: number; soreness: number }[] = [
-  { back: 1, energy: 4, mood: 4, soreness: 2 },
-  { back: 2, energy: 3, mood: 2, soreness: 4 },
-  { back: 3, energy: 4, mood: 3, soreness: 3 },
-  { back: 4, energy: 5, mood: 5, soreness: 1 },
-  { back: 5, energy: 3, mood: 3, soreness: 2 },
-  { back: 6, energy: 2, mood: 3, soreness: 3 },
-  { back: 7, energy: 4, mood: 4, soreness: 2 },
-  { back: 9, energy: 4, mood: 4, soreness: 2 },
-  { back: 10, energy: 3, mood: 2, soreness: 3 },
-  { back: 13, energy: 3, mood: 3, soreness: 2 },
-];
-
-/**
- * Past days only. Today is left to the provider, which has real numbers to
- * correlate against today's sleep and load, so the panel never shows a
- * fabricated entry for the day you are actually living.
- */
-function seed(state: CheckInsState, today: string): CheckInsState {
-  if (state.seeded || state.entries.length) {
-    return state.seeded ? state : { ...state, seeded: true };
-  }
-
-  /* Carry over whatever the old single-slot check-in left behind. Its date is
-     the day it was actually logged, so it is kept rather than re-dated. */
-  let carried: StoredCheckIn | null = null;
-  try {
-    const raw = localStorage.getItem(LEGACY_KEY);
-    if (raw) {
-      const parsed = normalize(JSON.parse(raw));
-      if (parsed && parsed.date <= today) carried = parsed;
-    }
-  } catch {
-    carried = null;
-  }
-
-  const stamp = new Date().toISOString();
-  const seeded = SEED.map((n) => ({
-    date: addDays(today, -n.back),
-    energy: n.energy,
-    mood: n.mood,
-    soreness: n.soreness,
-    updatedAt: stamp,
-  }));
-
-  const merged = [...seeded, ...(carried ? [carried] : [])].sort(sortDesc);
-
-  return { ...state, seeded: true, entries: merged };
-}
-
-export function seedCheckIns(today: string) {
-  /* Not for a bound account — same rule as notes. */
-  if (store.getSnapshot().owner !== null) return;
-  store.set(seed(store.getSnapshot(), today));
 }
 
 export function clearCheckIns() {

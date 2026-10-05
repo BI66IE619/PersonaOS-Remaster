@@ -1,5 +1,4 @@
 import { createStore } from "@/lib/create-store";
-import { addDays } from "@/lib/dates";
 import { EMPTY_HABITS, type Habit, type HabitsState } from "@/lib/types-habits";
 
 const KEY = "personaos:habits";
@@ -241,51 +240,6 @@ export function habitPayload(h: Habit, position: number) {
 /* --------------------------------------------------------------------------
  * The store's exported callers.
  * ------------------------------------------------------------------------ */
-
-const at = (today: string, offsets: number[]) => offsets.map((o) => addDays(today, o));
-
-function seed(state: HabitsState, today: string): HabitsState {
-  if (state.seeded || state.habits.length) {
-    return state.seeded ? state : { ...state, seeded: true };
-  }
-  const stamp = now();
-  const habit = (name: string, offsets: number[]): Habit => ({
-    id: uid(),
-    name,
-    createdAt: stamp,
-    days: at(today, offsets),
-    updatedAt: stamp,
-  });
-
-  /* Four deliberately different states so the panel is legible immediately:
-     unbroken, patchy, alive-but-not-yet-done-today, and fully broken.
-     Offsets are backwards from today — a habit history is in the past. */
-  return {
-    ...state,
-    seeded: true,
-    habits: [
-      habit("Read", Array.from({ length: 20 }, (_, i) => -i)),
-      habit("Practice piano", [0, -1, -2, -3, -5, -6, -7, -8, -9, -11, -12, -14, -17]),
-      habit("Stretch", [-1, -2, -3, -4, -5]),
-      habit("Morning walk", [-30, -29, -28, -27, -26, -25]),
-    ],
-  };
-}
-
-export function seedHabits(today: string) {
-  /* Not for a bound account. The samples are a first-run affordance for a local
-     record, and the moment this record belongs to a real person they would be
-     pushed to their server and appear on their other devices as habits they never
-     chose. A new account starts empty, which is the honest version of its plan.
-     The `owner` check is the test: null means nobody has claimed this record. */
-  if (store.getSnapshot().owner !== null) return;
-  /* Same guard, same reason as seedSample and seedStrength: seed() returns the
-     state by reference once it is seeded, so writing unconditionally makes every
-     visit to Home pay for a localStorage write that changes nothing. */
-  const current = store.getSnapshot();
-  const next = seed(current, today);
-  if (next !== current) store.set(next);
-}
 
 export function addHabit(name: string) {
   store.update((s) => addHabitPure(s, name));

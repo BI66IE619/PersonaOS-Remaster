@@ -2,7 +2,6 @@ import { HomeScreen } from "@/components/home-screen";
 import { AccountSync } from "@/components/account-sync";
 import { getProvider } from "@/lib/providers";
 import { buildMoneyView } from "@/lib/finance/view";
-import { generateTransactions } from "@/lib/finance/seed";
 import { loadMoney } from "@/lib/finance/money-data";
 import { requireUserId } from "@/lib/dal";
 import { monthDays, monthKey } from "@/lib/dates";
@@ -22,11 +21,9 @@ export default async function Home() {
      panel showed a fixed seed whether or not a bank was connected — real money on
      one screen and invented money on the other, side by side. */
 
-  /* The seed stands in only when no bank is linked, and only as a labelled sample.
-     Never blended with real rows: a figure that might be either reads as a bug
-     rather than as an unlinked account. */
-  const seed = buildMoneyView(generateTransactions(now), monthKey(now));
-  const shown = money.linked && money.view ? money.view : seed;
+  /* Real ledger when a bank is linked; an empty month otherwise, never an invented
+     one. The generated stand-in used to sit here and read as the user's own money. */
+  const shown = money.linked && money.view ? money.view : buildMoneyView([], monthKey(now));
 
   /* Today's spend is carved out of the month view rather than asked for as a day,
      because the aggregator only caches whole months and does not have a day. */
