@@ -10,12 +10,16 @@ import com.getcapacitor.annotation.CapacitorPlugin
 import com.samsung.android.sdk.health.data.HealthDataService
 import com.samsung.android.sdk.health.data.HealthDataStore
 import com.samsung.android.sdk.health.data.data.HealthDataPoint
+import com.samsung.android.sdk.health.data.data.entries.ExerciseSession
 import com.samsung.android.sdk.health.data.data.entries.SleepSession
 import com.samsung.android.sdk.health.data.permission.AccessType
 import com.samsung.android.sdk.health.data.permission.Permission
 import com.samsung.android.sdk.health.data.request.DataType
 import com.samsung.android.sdk.health.data.request.DataTypes
 import com.samsung.android.sdk.health.data.request.InstantTimeFilter
+import com.samsung.android.sdk.health.data.request.LocalDateFilter
+import com.samsung.android.sdk.health.data.request.LocalDateGroup
+import com.samsung.android.sdk.health.data.request.LocalDateGroupUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -25,27 +29,38 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 /**
- * Sleep from Samsung Health, via the Samsung Health Data SDK.
+ * Health data from Samsung Health, via the Samsung Health Data SDK.
  *
- * Health Connect cannot see Samsung Health's sleep — Samsung does not publish it
- * there — so this reads it from Samsung Health directly. It exists for exactly one
- * data type: sleep. Steps, calories and workouts already arrive through Health
- * Connect, and Samsung exposes no HRV or resting-heart-rate type at all, so there
- * is nothing else to gain here.
+ * This exists because Health Connect is a dead end on a Samsung phone: Samsung
+ * Health publishes only steps and active calories to it, and never sleep, HRV or
+ * resting heart rate. Reading from Samsung Health directly is the only way to get
+ * those, and sleep in particular is what the readiness score needs.
  *
- * Setup on the device: Samsung Health developer mode must be enabled and the app
- * verified with Samsung, or the permission request fails before any read. See
- * developer.samsung.com/health/data.
+ * Five types, and the reason for each:
+ *   - SLEEP        the night, with stages — the one Health Connect cannot provide
+ *   - STEPS        daily totals (Health Connect's were sparse)
+ *   - ACTIVITY_SUMMARY  active calories, for the day's burn
+ *   - HEART_RATE   the day's minimum, used as a resting-heart-rate proxy
+ *   - EXERCISE     workouts
+ *
+ * Steps and calories are not readable as rows — Samsung stores them as totals — so
+ * they are aggregated grouped by day. Sleep, heart rate and exercise are read.
+ *
+ * The device must have Samsung Health's "Developer Mode for Data Read" on until the
+ * app is registered with Samsung, or every call fails with an authorization error.
  */
 @CapacitorPlugin(name = "SamsungHealth")
 class SamsungHealthPlugin : Plugin() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    /** Only sleep. Every extra type is another permission to justify and another
-     *  way for the request to be refused. */
-    private val permissions: Set<Permission> =
-        setOf(Permission.of(DataTypes.SLEEP, AccessType.READ))
+    private val permissions: Set<Permission> = setOf(
+        Permission.of(DataTypes.SLEEP, AccessType.READ),
+        Permission.of(DataTypes.STEPS, AccessType.READ),
+        Permission.of(DataTypes.ACTIVITY_SUMMARY, AccessType.READ),
+        Permission.of(DataTypes.HEART_RATE, AccessType.READ),
+        Permission.of(DataTypes.EXERCISE, AccessType.READ),
+    )
 
     private fun store(): HealthDataStore = HealthDataService.getStore(context)
 
@@ -56,6 +71,8 @@ class SamsungHealthPlugin : Plugin() {
                 val granted = store().getGrantedPermissions(permissions)
                 val ret = JSObject()
                 ret.put("complete", granted.containsAll(permissions))
+                ret.put("granted", granted.size)
+                ret.put("wanted", permissions.size)
                 call.resolve(ret)
             } catch (e: Exception) {
                 call.reject("Samsung Health not available: ${e.message}")
@@ -71,11 +88,11 @@ class SamsungHealthPlugin : Plugin() {
         }
         scope.launch {
             try {
-                /* The SDK shows its own permission screen from this call and
-                   resolves with the set actually granted. */
                 val granted = store().requestPermissions(permissions, activity)
                 val ret = JSObject()
                 ret.put("complete", granted.containsAll(permissions))
+                ret.put("granted", granted.size)
+                ret.put("wanted", permissions.size)
                 call.resolve(ret)
             } catch (e: Exception) {
                 call.reject("Permission request failed: ${e.message}")
@@ -83,10 +100,13 @@ class SamsungHealthPlugin : Plugin() {
         }
     }
 
-    /** Reads sleep for a day window and returns { daily: [...] } shaped for
-     *  /api/health/ingest. One row per night, attributed to the morning it ended. */
+    /**
+     * Reads the window and returns { daily: [...], sessions: [...] } shaped for
+     * /api/health/ingest. One daily row per local day — steps, active calories,
+     * resting-HR proxy and sleep together — plus one session row per workout.
+     */
     @PluginMethod
-    fun readSamsungSleep(call: PluginCall) {
+    fun readSamsung(call: PluginCall) {
         val from = call.getString("from")
         val to = call.getString("to")
         if (from == null || to == null) {
@@ -98,75 +118,156 @@ class SamsungHealthPlugin : Plugin() {
                 val zone = ZoneId.systemDefault()
                 val startDate = LocalDate.parse(from)
                 val endDate = LocalDate.parse(to)
+                val dayFilter = LocalDateFilter.of(startDate, endDate, true, true)
+                val dayGroup = LocalDateGroup.of(LocalDateGroupUnit.DAILY, 1)
 
-                /* Sleep is an interval type, so it is asked for by instant range. The
-                   builder is obtained from the data type itself. */
-                val startInstant = startDate.atStartOfDay(zone).toInstant()
-                val endInstant = endDate.plusDays(1).atStartOfDay(zone).toInstant()
-                val request = DataTypes.SLEEP.readDataRequestBuilder
-                    .setInstantTimeFilter(InstantTimeFilter.of(startInstant, endInstant, true, true))
-                    .build()
-                val response = store().readData(request)
+                val rows = HashMap<LocalDate, JSObject>()
+                val debug = JSArray()
 
-                /* A SLEEP row is a night summary; its sessions live in the SESSIONS
-                   field. Flatten them all and bucket by the morning they ended on. */
-                val nights: List<HealthDataPoint> = response.dataList ?: emptyList()
-                val sessions = nights.flatMap { dp ->
-                    dp.getValueOrDefault(DataType.SleepType.SESSIONS, emptyList<SleepSession>())
-                }
-
-                /* Bucket each night by the local day it ended on. */
-                data class Agg(
-                    var totalSec: Long = 0,
-                    var deep: Long = 0,
-                    var rem: Long = 0,
-                    var light: Long = 0,
-                    var start: Instant? = null,
-                    var end: Instant? = null,
-                )
-
-                val byDay = HashMap<LocalDate, Agg>()
-                for (s in sessions) {
-                    val wakeDay = s.endTime.atZone(zone).toLocalDate()
-                    val agg = byDay.getOrPut(wakeDay) { Agg() }
-                    agg.totalSec += s.duration.seconds
-                    if (agg.start == null || s.startTime < agg.start!!) agg.start = s.startTime
-                    if (agg.end == null || s.endTime > agg.end!!) agg.end = s.endTime
-                    for (stage in s.stages ?: emptyList()) {
-                        val sec = stage.endTime.epochSecond - stage.startTime.epochSecond
-                        when (stage.stage) {
-                            DataType.SleepType.StageType.DEEP -> agg.deep += sec
-                            DataType.SleepType.StageType.REM -> agg.rem += sec
-                            DataType.SleepType.StageType.LIGHT -> agg.light += sec
-                            else -> {}
-                        }
+                fun rowFor(day: LocalDate): JSObject = rows.getOrPut(day) {
+                    JSObject().apply {
+                        put("recordId", "shs-$day")
+                        put("day", day.toString())
+                        put("origin", "com.samsung.shealth")
+                        put("updatedAt", Instant.now().toString())
                     }
                 }
 
-                val daily = JSArray()
-                for ((day, agg) in byDay) {
-                    if (agg.totalSec <= 0) continue
-                    val row = JSObject()
-                    row.put("recordId", "shs-sleep-$day")
-                    row.put("day", day.toString())
-                    row.put("origin", "com.samsung.shealth")
-                    row.put("updatedAt", Instant.now().toString())
-                    row.put("sleepTotalMin", agg.totalSec / 60)
-                    if (agg.deep > 0) row.put("sleepDeepMin", agg.deep / 60)
-                    if (agg.rem > 0) row.put("sleepRemMin", agg.rem / 60)
-                    if (agg.light > 0) row.put("sleepLightMin", agg.light / 60)
-                    agg.start?.let { row.put("sleepStartUtc", it.toString()) }
-                    agg.end?.let { row.put("sleepEndUtc", it.toString()) }
-                    daily.put(row)
+                /* Steps: a daily total, so aggregated grouped by day rather than read. */
+                try {
+                    val request = DataType.StepsType.TOTAL.requestBuilder
+                        .setLocalTimeFilterWithGroup(
+                            dayFilter.toLocalTimeFilter(),
+                            dayGroup.toLocalTimeGroup(),
+                        )
+                        .build()
+                    for (a in store().aggregateData(request).dataList ?: emptyList()) {
+                        rowFor(a.startTime.atZone(zone).toLocalDate()).put("steps", a.value)
+                    }
+                } catch (e: Exception) {
+                    debug.put("steps: ${e.message}")
                 }
+
+                /* Active calories, same shape. */
+                try {
+                    val request = DataType.ActivitySummaryType.TOTAL_ACTIVE_CALORIES_BURNED.requestBuilder
+                        .setLocalTimeFilterWithGroup(
+                            dayFilter.toLocalTimeFilter(),
+                            dayGroup.toLocalTimeGroup(),
+                        )
+                        .build()
+                    for (a in store().aggregateData(request).dataList ?: emptyList()) {
+                        val kcal = (a.value as? Number)?.toDouble()
+                        if (kcal != null) rowFor(a.startTime.atZone(zone).toLocalDate()).put("activeKcal", kcal)
+                    }
+                } catch (e: Exception) {
+                    debug.put("activeKcal: ${e.message}")
+                }
+
+                /* Samsung exposes no resting-heart-rate value, so the day's minimum
+                   heart rate is used as the closest available proxy. */
+                try {
+                    val request = DataType.HeartRateType.MIN.requestBuilder
+                        .setLocalDateFilterWithGroup(dayFilter, dayGroup)
+                        .build()
+                    for (a in store().aggregateData(request).dataList ?: emptyList()) {
+                        val bpm = (a.value as? Number)?.toInt()
+                        if (bpm != null && bpm > 0) rowFor(a.startTime.atZone(zone).toLocalDate()).put("restingHr", bpm)
+                    }
+                } catch (e: Exception) {
+                    debug.put("restingHr: ${e.message}")
+                }
+
+                /* Sleep: one interval per night, attributed to the morning it ended. */
+                try {
+                    val startInstant = startDate.atStartOfDay(zone).toInstant()
+                    val endInstant = endDate.plusDays(1).atStartOfDay(zone).toInstant()
+                    val request = DataTypes.SLEEP.readDataRequestBuilder
+                        .setInstantTimeFilter(InstantTimeFilter.of(startInstant, endInstant, true, true))
+                        .build()
+                    val nights: List<HealthDataPoint> = store().readData(request).dataList ?: emptyList()
+                    for (dp in nights) {
+                        val sessions = dp.getValueOrDefault(DataType.SleepType.SESSIONS, emptyList<SleepSession>())
+                        for (s in sessions) {
+                            val wakeDay = s.endTime.atZone(zone).toLocalDate()
+                            val row = rowFor(wakeDay)
+                            row.put("sleepTotalMin", s.duration.seconds / 60)
+                            var deep = 0L
+                            var rem = 0L
+                            var light = 0L
+                            var earliest: Instant? = s.startTime
+                            var latest: Instant? = s.endTime
+                            for (stage in s.stages ?: emptyList()) {
+                                val sec = stage.endTime.epochSecond - stage.startTime.epochSecond
+                                when (stage.stage) {
+                                    DataType.SleepType.StageType.DEEP -> deep += sec
+                                    DataType.SleepType.StageType.REM -> rem += sec
+                                    DataType.SleepType.StageType.LIGHT -> light += sec
+                                    else -> {}
+                                }
+                            }
+                            if (deep > 0) row.put("sleepDeepMin", deep / 60)
+                            if (rem > 0) row.put("sleepRemMin", rem / 60)
+                            if (light > 0) row.put("sleepLightMin", light / 60)
+                            earliest?.let {
+                                if (row.optString("sleepStartUtc").isEmpty() || it.isBefore(Instant.parse(row.getString("sleepStartUtc")))) {
+                                    row.put("sleepStartUtc", it.toString())
+                                }
+                            }
+                            latest?.let {
+                                if (row.optString("sleepEndUtc").isEmpty() || it.isAfter(Instant.parse(row.getString("sleepEndUtc")))) {
+                                    row.put("sleepEndUtc", it.toString())
+                                }
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    debug.put("sleep: ${e.message}")
+                }
+
+                /* Exercise sessions across the window. */
+                val sessions = JSArray()
+                try {
+                    val startInstant = startDate.atStartOfDay(zone).toInstant()
+                    val endInstant = endDate.plusDays(1).atStartOfDay(zone).toInstant()
+                    val request = DataTypes.EXERCISE.readDataRequestBuilder
+                        .setInstantTimeFilter(InstantTimeFilter.of(startInstant, endInstant, true, true))
+                        .build()
+                    val exercises: List<HealthDataPoint> = store().readData(request).dataList ?: emptyList()
+                    for (dp in exercises) {
+                        val list = dp.getValueOrDefault(DataType.ExerciseType.SESSIONS, emptyList<ExerciseSession>())
+                        for (s in list) {
+                            val row = JSObject()
+                            row.put("recordId", "shs-ex-${s.startTime.epochSecond}-${s.duration.seconds}")
+                            row.put("day", s.startTime.atZone(zone).toLocalDate().toString())
+                            row.put("origin", "com.samsung.shealth")
+                            row.put("activity", s.customTitle?.takeIf { it.isNotBlank() } ?: "Exercise")
+                            row.put("startedAtUtc", s.startTime.toString())
+                            row.put("durationMin", (s.duration.seconds / 60).coerceAtLeast(1))
+                            row.put("energyKcal", s.calories.toDouble())
+                            s.distance?.let { row.put("distanceM", it.toDouble()) }
+                            s.meanHeartRate?.let { row.put("avgHr", it.toInt()) }
+                            s.maxHeartRate?.let { row.put("maxHr", it.toInt()) }
+                            row.put("updatedAt", Instant.now().toString())
+                            sessions.put(row)
+                        }
+                    }
+                } catch (e: Exception) {
+                    debug.put("exercise: ${e.message}")
+                }
+
+                val daily = JSArray()
+                for (row in rows.values) daily.put(row)
 
                 val ret = JSObject()
                 ret.put("daily", daily)
-                ret.put("sessions", JSArray())
+                ret.put("sessions", sessions)
+                if (debug.length() > 0) ret.put("debug", debug)
                 call.resolve(ret)
             } catch (e: Exception) {
-                call.reject("Sleep read failed: ${e.message}")
+                call.reject("Samsung read failed: ${e.message}")
             }
         }
     }
 }
+

@@ -111,7 +111,7 @@ export async function syncHealthConnect(days = 30): Promise<HealthSyncResult> {
 interface SamsungHealthPlugin {
   checkSamsungPermissions(): Promise<{ complete: boolean }>;
   requestSamsungPermissions(): Promise<{ complete: boolean }>;
-  readSamsungSleep(options: { from: string; to: string }): Promise<HealthPayload>;
+  readSamsung(options: { from: string; to: string }): Promise<HealthPayload>;
 }
 
 let samsung: SamsungHealthPlugin | null = null;
@@ -121,15 +121,13 @@ function shs(): SamsungHealthPlugin {
 }
 
 /**
- * Sleep from Samsung Health.
+ * Samsung Health: sleep, steps, active calories, resting-HR proxy and workouts.
  *
  * Health Connect cannot see Samsung Health's sleep — Samsung does not publish it
- * there, which is why every sleep field was empty. This reads it directly. Steps,
- * calories and workouts already come from Health Connect, so sleep is the only thing
- * fetched here, and the two are posted as separate rows that the server merges per
- * field by day.
+ * there — which is why this exists. Steps and calories come from here too because
+ * Samsung's are more complete than the few days Health Connect had.
  */
-export async function syncSamsungSleep(days = 30): Promise<HealthSyncResult> {
+export async function syncSamsungHealth(days = 30): Promise<HealthSyncResult> {
   if (!healthConnectAvailable()) {
     return { ok: false, error: "Samsung Health is only available in the phone app." };
   }
@@ -148,16 +146,21 @@ export async function syncSamsungSleep(days = 30): Promise<HealthSyncResult> {
 
     const to = dayKey(new Date());
     const from = addDays(to, -(days - 1));
-    const data = await shs().readSamsungSleep({ from, to });
+    const data = await shs().readSamsung({ from, to });
 
     const res = await fetch("/api/health/ingest", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ daily: data.daily }),
+      body: JSON.stringify({ daily: data.daily, sessions: data.sessions }),
     });
-    if (!res.ok) return { ok: false, error: "The server rejected the sleep data." };
-    const body = (await res.json().catch(() => ({}))) as { daily?: number };
-    return { ok: true, daily: body.daily ?? data.daily.length, sessions: 0 };
+    if (!res.ok) return { ok: false, error: "The server rejected the Samsung Health data." };
+    const body = (await res.json().catch(() => ({}))) as { daily?: number; sessions?: number };
+    return {
+      ok: true,
+      daily: body.daily ?? data.daily.length,
+      sessions: body.sessions ?? data.sessions.length,
+      ...(data.debug && data.debug.length ? { debug: data.debug } : {}),
+    };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Samsung Health sync failed." };
   }

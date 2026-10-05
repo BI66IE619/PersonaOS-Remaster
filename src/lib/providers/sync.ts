@@ -75,6 +75,26 @@ function originRank(origin: string): number {
   return 2;
 }
 
+/**
+ * Collapse the same workout reported by more than one source.
+ *
+ * Health Connect's workouts are the ones Samsung Health published to it, so once
+ * Samsung is read directly the identical walk arrives twice. Kept by the
+ * best-ranked source, matched on activity and duration within the day, which is
+ * specific enough that two genuinely different workouts do not merge.
+ */
+function dedupeSessions(sessions: HealthSessionRow[]): HealthSessionRow[] {
+  const seen = new Set<string>();
+  return [...sessions]
+    .sort((a, b) => originRank(a.dataOrigin) - originRank(b.dataOrigin))
+    .filter((s) => {
+      const key = `${s.activity}|${s.durationMin}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
 type HealthRow = Awaited<ReturnType<typeof getHealthDaily>>[number];
 type HealthSessionRow = Awaited<ReturnType<typeof getHealthSessions>>[number];
 
@@ -373,7 +393,7 @@ function toDayRecord(
   const asleep = Math.min(deep + rem + light, sleepTotalMin);
   const awakeMin = Math.max(0, sleepTotalMin - asleep);
 
-  const daySessions = sessions.filter((s) => s.day === date);
+  const daySessions = dedupeSessions(sessions.filter((s) => s.day === date));
   const workouts: Workout[] = daySessions.map((s) => ({
     id: s.sourceRecordId,
     activity: s.activity,

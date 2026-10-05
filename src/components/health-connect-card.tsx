@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useIsNativeApp } from "@/lib/native-auth";
-import { syncHealthConnect, syncSamsungSleep } from "@/lib/health-native";
+import { syncHealthConnect, syncSamsungHealth } from "@/lib/health-native";
 
 /**
  * The only control for Health Connect, and it renders only inside the phone app.
@@ -31,22 +31,25 @@ export function HealthConnectCard() {
     /* Two sources on purpose: Health Connect has steps, calories and workouts but no
        sleep, and Samsung Health has sleep but is not what Health Connect reads. */
     const activity = await syncHealthConnect(30);
-    const sleep = await syncSamsungSleep(30);
+    const samsung = await syncSamsungHealth(30);
     setBusy(false);
 
     const parts: string[] = [];
     parts.push(
       activity.ok
-        ? `Activity: ${activity.daily} day${activity.daily === 1 ? "" : "s"}, ${activity.sessions} workout${activity.sessions === 1 ? "" : "s"}.`
-        : `Activity failed: ${activity.error}`,
+        ? `Health Connect: ${activity.daily} days, ${activity.sessions} workouts.`
+        : `Health Connect failed: ${activity.error}`,
     );
     parts.push(
-      sleep.ok
-        ? `Sleep: ${sleep.daily} night${sleep.daily === 1 ? "" : "s"}.`
-        : `Sleep failed: ${sleep.error}`,
+      samsung.ok
+        ? `Samsung Health: ${samsung.daily} days, ${samsung.sessions} workouts.`
+        : `Samsung Health failed: ${samsung.error}`,
     );
     if (activity.ok && activity.probe) {
-      parts.push(`Health Connect: ${JSON.stringify(activity.probe)}`);
+      parts.push(`HC records: ${JSON.stringify(activity.probe)}`);
+    }
+    if (samsung.ok && samsung.debug?.length) {
+      parts.push(`Samsung issues: ${samsung.debug.slice(0, 4).join(" | ")}`);
     }
     setMessage(parts.join("  •  "));
 
