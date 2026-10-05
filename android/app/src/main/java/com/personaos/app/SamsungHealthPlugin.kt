@@ -49,6 +49,17 @@ import java.time.ZoneId
  * The device must have Samsung Health's "Developer Mode for Data Read" on until the
  * app is registered with Samsung, or every call fails with an authorization error.
  */
+/** One night's sleep totals, summed across every session that ended on the same
+ *  local day. */
+private class ShsSleepAgg {
+    var totalSec = 0L
+    var deepSec = 0L
+    var remSec = 0L
+    var lightSec = 0L
+    var start: Instant? = null
+    var end: Instant? = null
+}
+
 @CapacitorPlugin(name = "SamsungHealth")
 class SamsungHealthPlugin : Plugin() {
 
@@ -186,40 +197,38 @@ class SamsungHealthPlugin : Plugin() {
                         .setInstantTimeFilter(InstantTimeFilter.of(startInstant, endInstant, true, true))
                         .build()
                     val nights: List<HealthDataPoint> = store().readData(request).dataList ?: emptyList()
+                    /* Accumulated per wake day, not written per session: a day can hold
+                       more than one sleep session (a nap, or a night split across
+                       midnight), and overwriting made the total depend on whichever
+                       session came last. */
+                    val sleepByDay = HashMap<LocalDate, ShsSleepAgg>()
                     for (dp in nights) {
-                        val sessions = dp.getValueOrDefault(DataType.SleepType.SESSIONS, emptyList<SleepSession>())
-                        for (s in sessions) {
+                        val list = dp.getValueOrDefault(DataType.SleepType.SESSIONS, emptyList<SleepSession>())
+                        for (s in list) {
                             val wakeDay = s.endTime.atZone(zone).toLocalDate()
-                            val row = rowFor(wakeDay)
-                            row.put("sleepTotalMin", s.duration.seconds / 60)
-                            var deep = 0L
-                            var rem = 0L
-                            var light = 0L
-                            var earliest: Instant? = s.startTime
-                            var latest: Instant? = s.endTime
+                            val agg = sleepByDay.getOrPut(wakeDay) { ShsSleepAgg() }
+                            agg.totalSec += s.duration.seconds
+                            if (agg.start == null || s.startTime < agg.start!!) agg.start = s.startTime
+                            if (agg.end == null || s.endTime > agg.end!!) agg.end = s.endTime
                             for (stage in s.stages ?: emptyList()) {
                                 val sec = stage.endTime.epochSecond - stage.startTime.epochSecond
                                 when (stage.stage) {
-                                    DataType.SleepType.StageType.DEEP -> deep += sec
-                                    DataType.SleepType.StageType.REM -> rem += sec
-                                    DataType.SleepType.StageType.LIGHT -> light += sec
+                                    DataType.SleepType.StageType.DEEP -> agg.deepSec += sec
+                                    DataType.SleepType.StageType.REM -> agg.remSec += sec
+                                    DataType.SleepType.StageType.LIGHT -> agg.lightSec += sec
                                     else -> {}
                                 }
                             }
-                            if (deep > 0) row.put("sleepDeepMin", deep / 60)
-                            if (rem > 0) row.put("sleepRemMin", rem / 60)
-                            if (light > 0) row.put("sleepLightMin", light / 60)
-                            earliest?.let {
-                                if (row.optString("sleepStartUtc").isEmpty() || it.isBefore(Instant.parse(row.getString("sleepStartUtc")))) {
-                                    row.put("sleepStartUtc", it.toString())
-                                }
-                            }
-                            latest?.let {
-                                if (row.optString("sleepEndUtc").isEmpty() || it.isAfter(Instant.parse(row.getString("sleepEndUtc")))) {
-                                    row.put("sleepEndUtc", it.toString())
-                                }
-                            }
                         }
+                    }
+                    for ((day, agg) in sleepByDay) {
+                        val row = rowFor(day)
+                        if (agg.totalSec > 0) row.put("sleepTotalMin", agg.totalSec / 60)
+                        if (agg.deepSec > 0) row.put("sleepDeepMin", agg.deepSec / 60)
+                        if (agg.remSec > 0) row.put("sleepRemMin", agg.remSec / 60)
+                        if (agg.lightSec > 0) row.put("sleepLightMin", agg.lightSec / 60)
+                        agg.start?.let { row.put("sleepStartUtc", it.toString()) }
+                        agg.end?.let { row.put("sleepEndUtc", it.toString()) }
                     }
                 } catch (e: Exception) {
                     debug.put("sleep: ${e.message}")

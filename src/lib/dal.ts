@@ -268,7 +268,15 @@ export async function getHealthDaily(userId: string, fromDay: string, toDay: str
         sql`${schema.healthDaily.day} <= ${toDay}`,
       ),
     )
-    .orderBy(schema.healthDaily.day);
+    /* Ordered past the day so the per-field merge downstream is deterministic. Two
+       rows can share a day — one per source — and without a tiebreak Postgres may
+       return them in any order, which made the picked sleep figure flip between
+       syncs. Source and record id are stable, so this makes the order stable too. */
+    .orderBy(
+      schema.healthDaily.day,
+      schema.healthDaily.dataOrigin,
+      schema.healthDaily.sourceRecordId,
+    );
 }
 
 export async function getHealthSessions(userId: string, fromDay: string, toDay: string) {
