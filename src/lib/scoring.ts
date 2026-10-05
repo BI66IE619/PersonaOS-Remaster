@@ -28,6 +28,7 @@ export function computeBaselines(history: DayRecord[]): Record<string, Baseline>
   const prior = history.slice(0, -1).slice(-BASELINE_WINDOW);
   return {
     sleep: stat(prior.map((d) => d.sleep.totalMin)),
+    deep: stat(prior.map((d) => d.sleep.deepMin)),
     efficiency: stat(prior.map((d) => efficiencyOf(d.sleep))),
     hrv: stat(prior.map((d) => d.hrv)),
     restingHr: stat(prior.map((d) => d.restingHr)),
@@ -264,14 +265,25 @@ export function buildSparks(
   }[] = [
     { key: "sleep", label: "Sleep", unit: "h", higherIsBetter: true, get: (d) => d.sleep.totalMin / 60 },
     { key: "hrv", label: "HRV", unit: "ms", higherIsBetter: true, get: (d) => d.hrv },
+    { key: "deep", label: "Deep sleep", unit: "h", higherIsBetter: true, get: (d) => d.sleep.deepMin / 60 },
     { key: "restingHr", label: "Resting HR", unit: "bpm", higherIsBetter: false, get: (d) => d.restingHr },
     { key: "load", label: "Load", unit: "", higherIsBetter: false, get: (d) => d.loadScore },
   ];
-  const keys = allKeys.filter(
-    /* A source that never reports HRV or resting HR would otherwise show a flat
-       zero line as though it were a measurement. */
-    (k) => (k.key === "hrv" || k.key === "restingHr" ? baselines[k.key].mean > 0 : true),
-  );
+  const hrvAvailable = baselines.hrv.mean > 0;
+  const keys = allKeys.filter((k) => {
+    /* HRV and deep sleep share one slot: they are both the recovery line, and a
+       source that reports HRV (a chest strap, a ring) keeps its own. A source that
+       does not — every Samsung phone — gets deep sleep there instead, which is the
+       closest recovery signal the sleep stages can offer. */
+    if (k.key === "hrv") return hrvAvailable;
+    if (k.key === "deep") return !hrvAvailable;
+    /* A source that never reports resting HR would otherwise show a flat zero line
+       as though it were a measurement. */
+    if (k.key === "restingHr") return baselines.restingHr.mean > 0;
+    return true;
+  });
+
+  const inHours = (key: string) => key === "sleep" || key === "deep";
 
   return keys.map((k) => ({
     key: k.key,
@@ -280,8 +292,8 @@ export function buildSparks(
     higherIsBetter: k.higherIsBetter,
     points: window.map((d) => ({ date: d.date, value: round(k.get(d), 2) })),
     baseline: {
-      mean: round(k.key === "sleep" ? baselines.sleep.mean / 60 : baselines[k.key].mean, 2),
-      sd: round(k.key === "sleep" ? baselines.sleep.sd / 60 : baselines[k.key].sd, 2),
+      mean: round(inHours(k.key) ? baselines[k.key].mean / 60 : baselines[k.key].mean, 2),
+      sd: round(inHours(k.key) ? baselines[k.key].sd / 60 : baselines[k.key].sd, 2),
     },
   }));
 }
