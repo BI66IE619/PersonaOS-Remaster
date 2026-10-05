@@ -10,6 +10,7 @@ public class MainActivity extends BridgeActivity {
         /* Local plugins are not auto-discovered; they are registered here, before
            super.onCreate, so the bridge knows about them when it starts. */
         registerPlugin(HealthConnectPlugin.class);
+        registerPlugin(SamsungHealthPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

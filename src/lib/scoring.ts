@@ -65,17 +65,7 @@ export function computeSignals(
   const loadRatio = b.load.mean > 0 ? loadPerDay / b.load.mean : 1;
   const zLoad = loadRatio > 1.35 ? -(loadRatio - 1.35) * 2.2 : 0;
 
-  return [
-    {
-      key: "hrv",
-      label: "HRV",
-      z: zHrv,
-      weight: 0.3,
-      value: `${Math.round(today.hrv)} ms`,
-      delta: signed(round(((today.hrv - b.hrv.mean) / b.hrv.mean) * 100, 0), "%"),
-      tone: tone(zHrv),
-      higherIsBetter: true,
-    },
+  const signals: Signal[] = [
     {
       key: "sleep",
       label: "Sleep",
@@ -85,16 +75,6 @@ export function computeSignals(
       delta: signed(round(today.sleep.totalMin - b.sleep.mean, 0), "m"),
       tone: tone(zSleep),
       higherIsBetter: true,
-    },
-    {
-      key: "restingHr",
-      label: "Resting HR",
-      z: zRhr,
-      weight: 0.16,
-      value: `${today.restingHr} bpm`,
-      delta: signed(round(today.restingHr - b.restingHr.mean, 0), " bpm"),
-      tone: tone(zRhr),
-      higherIsBetter: false,
     },
     {
       key: "efficiency",
@@ -116,7 +96,39 @@ export function computeSignals(
       tone: tone(zLoad),
       higherIsBetter: false,
     },
-  ].sort((a, c) => Math.abs(c.z) * c.weight - Math.abs(a.z) * a.weight);
+  ];
+
+  /* HRV and resting heart rate are only included when the source actually reports
+     them. A device that does not — Samsung Health, through Health Connect — would
+     otherwise feed a baseline of zero, which z-scores to a meaningless neutral and
+     divides by zero building the delta text. Dropping the signal is honest; keeping
+     it as a fabricated zero is not. */
+  if (b.hrv.mean > 0) {
+    signals.push({
+      key: "hrv",
+      label: "HRV",
+      z: zHrv,
+      weight: 0.3,
+      value: `${Math.round(today.hrv)} ms`,
+      delta: signed(round(((today.hrv - b.hrv.mean) / b.hrv.mean) * 100, 0), "%"),
+      tone: tone(zHrv),
+      higherIsBetter: true,
+    });
+  }
+  if (b.restingHr.mean > 0) {
+    signals.push({
+      key: "restingHr",
+      label: "Resting HR",
+      z: zRhr,
+      weight: 0.16,
+      value: `${today.restingHr} bpm`,
+      delta: signed(round(today.restingHr - b.restingHr.mean, 0), " bpm"),
+      tone: tone(zRhr),
+      higherIsBetter: false,
+    });
+  }
+
+  return signals.sort((a, c) => Math.abs(c.z) * c.weight - Math.abs(a.z) * a.weight);
 }
 
 /** Readiness band thresholds — single source of truth, shared with the ring glow. */
@@ -243,7 +255,7 @@ export function buildSparks(
   baselines: Record<string, Baseline>,
 ): Spark[] {
   const window = history.slice(-30);
-  const keys: {
+  const allKeys: {
     key: string;
     label: string;
     unit: string;
@@ -255,6 +267,11 @@ export function buildSparks(
     { key: "restingHr", label: "Resting HR", unit: "bpm", higherIsBetter: false, get: (d) => d.restingHr },
     { key: "load", label: "Load", unit: "", higherIsBetter: false, get: (d) => d.loadScore },
   ];
+  const keys = allKeys.filter(
+    /* A source that never reports HRV or resting HR would otherwise show a flat
+       zero line as though it were a measurement. */
+    (k) => (k.key === "hrv" || k.key === "restingHr" ? baselines[k.key].mean > 0 : true),
+  );
 
   return keys.map((k) => ({
     key: k.key,

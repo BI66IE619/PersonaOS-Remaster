@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useIsNativeApp } from "@/lib/native-auth";
-import { syncHealthConnect } from "@/lib/health-native";
+import { syncHealthConnect, syncSamsungSleep } from "@/lib/health-native";
 
 /**
  * The only control for Health Connect, and it renders only inside the phone app.
@@ -27,22 +27,31 @@ export function HealthConnectCard() {
     if (busy) return;
     setBusy(true);
     setMessage(null);
-    const result = await syncHealthConnect(30);
+
+    /* Two sources on purpose: Health Connect has steps, calories and workouts but no
+       sleep, and Samsung Health has sleep but is not what Health Connect reads. */
+    const activity = await syncHealthConnect(30);
+    const sleep = await syncSamsungSleep(30);
     setBusy(false);
-    if (result.ok) {
-      const base = `Synced ${result.daily} day${result.daily === 1 ? "" : "s"} and ${result.sessions} workout${result.sessions === 1 ? "" : "s"}.`;
-      const parts = [base];
-      if (result.debug && result.debug.length) parts.push(`Some reads failed: ${result.debug.slice(0, 4).join(" | ")}`);
-      /* Raw counts from the phone, so a device that reads nothing says what it
-         actually holds rather than leaving us to guess. */
-      if (result.probe) parts.push(`Health Connect records: ${JSON.stringify(result.probe)}`);
-      setMessage(parts.join("  •  "));
-      /* The data lands on the server, so the server render has to run again for
-         the panels above to show it. */
-      router.refresh();
-    } else {
-      setMessage(result.error);
+
+    const parts: string[] = [];
+    parts.push(
+      activity.ok
+        ? `Activity: ${activity.daily} day${activity.daily === 1 ? "" : "s"}, ${activity.sessions} workout${activity.sessions === 1 ? "" : "s"}.`
+        : `Activity failed: ${activity.error}`,
+    );
+    parts.push(
+      sleep.ok
+        ? `Sleep: ${sleep.daily} night${sleep.daily === 1 ? "" : "s"}.`
+        : `Sleep failed: ${sleep.error}`,
+    );
+    if (activity.ok && activity.probe) {
+      parts.push(`Health Connect: ${JSON.stringify(activity.probe)}`);
     }
+    setMessage(parts.join("  •  "));
+
+    /* The data lands on the server, so the server render has to run again. */
+    router.refresh();
   };
 
   return (

@@ -129,12 +129,6 @@ function mergeDay(rows: HealthRow[]): MergedDay {
   };
 }
 
-/** True when a day carries a sleep stage. Efficiency is one of the five signals
- *  and is computed from stages, so a total with no stages cannot be scored. */
-function hasStage(m: MergedDay) {
-  return m.sleepDeepMin !== null || m.sleepRemMin !== null || m.sleepLightMin !== null;
-}
-
 /**
  * What the app shows when there is activity but not enough to score readiness.
  *
@@ -359,15 +353,11 @@ function toDayRecord(
     hrvRmssd,
   } = merged;
 
-  if (
-    !sleepTotalMin ||
-    sleepTotalMin <= 0 ||
-    !hasStage(merged) ||
-    !sleepStartUtc ||
-    !sleepEndUtc ||
-    restingHr === null ||
-    hrvRmssd === null
-  ) {
+  /* Sleep is the one thing that must be present — a readiness score off no sleep
+     is not a score. HRV and resting heart rate are optional now: a source may not
+     report them (Samsung Health through Health Connect reports neither), and a day
+     is still worth scoring without them. */
+  if (!sleepTotalMin || sleepTotalMin <= 0 || !sleepStartUtc || !sleepEndUtc) {
     return null;
   }
 
@@ -422,8 +412,8 @@ function toDayRecord(
   return {
     date,
     sleep,
-    hrv: hrvRmssd,
-    restingHr,
+    hrv: hrvRmssd ?? 0,
+    restingHr: restingHr ?? 0,
     spo2: merged.spo2 ?? 0,
     steps: merged.steps ?? 0,
     activeMin:

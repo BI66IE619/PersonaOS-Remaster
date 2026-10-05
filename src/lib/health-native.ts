@@ -107,3 +107,58 @@ export async function syncHealthConnect(days = 30): Promise<HealthSyncResult> {
     return { ok: false, error: e instanceof Error ? e.message : "Health sync failed." };
   }
 }
+
+interface SamsungHealthPlugin {
+  checkSamsungPermissions(): Promise<{ complete: boolean }>;
+  requestSamsungPermissions(): Promise<{ complete: boolean }>;
+  readSamsungSleep(options: { from: string; to: string }): Promise<HealthPayload>;
+}
+
+let samsung: SamsungHealthPlugin | null = null;
+function shs(): SamsungHealthPlugin {
+  if (!samsung) samsung = registerPlugin<SamsungHealthPlugin>("SamsungHealth");
+  return samsung;
+}
+
+/**
+ * Sleep from Samsung Health.
+ *
+ * Health Connect cannot see Samsung Health's sleep — Samsung does not publish it
+ * there, which is why every sleep field was empty. This reads it directly. Steps,
+ * calories and workouts already come from Health Connect, so sleep is the only thing
+ * fetched here, and the two are posted as separate rows that the server merges per
+ * field by day.
+ */
+export async function syncSamsungSleep(days = 30): Promise<HealthSyncResult> {
+  if (!healthConnectAvailable()) {
+    return { ok: false, error: "Samsung Health is only available in the phone app." };
+  }
+  try {
+    const granted = await shs().checkSamsungPermissions();
+    if (!granted.complete) {
+      const asked = await shs().requestSamsungPermissions();
+      if (!asked.complete) {
+        return {
+          ok: false,
+          needsPermission: true,
+          error: "Samsung Health permission is missing. Enable it and try again.",
+        };
+      }
+    }
+
+    const to = dayKey(new Date());
+    const from = addDays(to, -(days - 1));
+    const data = await shs().readSamsungSleep({ from, to });
+
+    const res = await fetch("/api/health/ingest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ daily: data.daily }),
+    });
+    if (!res.ok) return { ok: false, error: "The server rejected the sleep data." };
+    const body = (await res.json().catch(() => ({}))) as { daily?: number };
+    return { ok: true, daily: body.daily ?? data.daily.length, sessions: 0 };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Samsung Health sync failed." };
+  }
+}
