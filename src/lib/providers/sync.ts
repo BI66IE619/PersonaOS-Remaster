@@ -136,13 +136,89 @@ function hasStage(m: MergedDay) {
 }
 
 /**
+ * What the app shows when there is activity but not enough to score readiness.
+ *
+ * Readiness is a trained signal — it needs sleep, its stages, HRV and resting
+ * heart rate before it will say anything. A source that publishes steps and
+ * calories but not sleep (Samsung Health does exactly this to Health Connect)
+ * would otherwise leave every screen blank even though there is real activity to
+ * show. So the day's steps, calories and workouts are rendered from what arrived,
+ * and the verdict says plainly that the rest is missing rather than inventing it.
+ */
+function partialView(
+  rows: HealthRow[],
+  sessions: HealthSessionRow[],
+  weightLog: Awaited<ReturnType<typeof getWeightLog>>,
+  now: Date,
+  tz: string,
+): TodayView {
+  const today = dayKey(now);
+  const body = buildBody(weightLog, today);
+
+  const byDay = new Map<string, HealthRow[]>();
+  for (const row of rows) {
+    const list = byDay.get(row.day);
+    if (list) list.push(row);
+    else byDay.set(row.day, [row]);
+  }
+  const latestDate = [...byDay.keys()].sort().at(-1) ?? today;
+  const merged = mergeDay(byDay.get(latestDate) ?? []);
+  const daySessions = sessions.filter((s) => s.day === latestDate);
+
+  const activeKcal = Math.round(
+    merged.activeKcal ?? daySessions.reduce((sum, s) => sum + (s.energyKcal ?? 0), 0),
+  );
+  const bmr = Math.round(body.weightKg * KCAL_PER_KG_BMR);
+  const workouts: Workout[] = daySessions.map((s) => ({
+    id: s.sourceRecordId,
+    activity: s.activity,
+    startUtc: s.startedAtUtc.toISOString(),
+    durationMin: s.durationMin,
+    calories: s.energyKcal,
+    avgHr: s.avgHr,
+    maxHr: s.maxHr,
+    distanceM: s.distanceM,
+  }));
+
+  return {
+    date: today,
+    readiness: { score: 0, band: "low" },
+    verdict:
+      "Not enough health data to score readiness yet. Health Connect is not sharing sleep or heart rate, so only your activity is shown.",
+    drivers: [],
+    lastNight: {
+      totalMin: merged.sleepTotalMin ?? 0,
+      stages: [],
+      efficiency: 0,
+      bedtime: merged.sleepStartUtc?.toISOString() ?? now.toISOString(),
+      wakeTime: merged.sleepEndUtc?.toISOString() ?? now.toISOString(),
+    },
+    today: {
+      workouts,
+      steps: merged.steps ?? 0,
+      stepGoal: STEP_GOAL,
+      activeMin: merged.activeMin ?? daySessions.reduce((sum, s) => sum + (s.activeMin ?? 0), 0),
+      loadScore: Math.round(
+        daySessions.reduce((sum, s) => sum + s.durationMin * intensityFromHr(s.avgHr), 0),
+      ),
+      calories: { total: bmr + activeKcal, active: activeKcal },
+    },
+    body,
+    sparks: [],
+    sleepSeries: [],
+    freshness: { latestAt: now.toISOString(), isStale: true },
+    timezone: tz,
+  };
+}
+
+/**
  * The real provider.
  *
- * Falls back to the mock for the whole view until enough real nights exist to
- * score, rather than rendering a readiness ring off three days or off zeros. The
- * fallback is re-evaluated on every render rather than latched, so the tab starts
- * showing real numbers the moment the phone's first sync lands — no cache to clear
- * and no flag to flip.
+ * Never invents anything. With no rows it returns an empty view; with activity but
+ * too few scorable nights it returns a partial view (steps, calories, workouts, and
+ * a verdict saying what is missing); with two or more scorable nights it computes
+ * readiness. The path is re-evaluated on every render rather than latched, so the
+ * tab starts showing real numbers the moment the phone's first sync lands.
  */
 export class SyncProvider implements DataProvider {
   async getToday(): Promise<TodayView> {
@@ -190,9 +266,9 @@ export class SyncProvider implements DataProvider {
 
     /* A single night leaves every baseline with a standard deviation over an empty
        sample and a z-score of pure noise, so a score off anything less than two is
-       not one the app can stand behind. Show the empty view rather than a number
-       the app cannot defend. */
-    if (history.length < 2) return emptyTodayView(now, tz);
+       not one the app can stand behind. Show the activity that did arrive instead
+       of an empty screen. */
+    if (history.length < 2) return partialView(rows, sessions, weightLog, now, tz);
 
     const baselines = computeBaselines(history);
     const signals = computeSignals(history, baselines);
