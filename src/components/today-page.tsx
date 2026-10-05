@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PageShell } from "@/components/page-shell";
 import { CheckInPanel } from "@/components/check-in-panel";
 import { DayHeader } from "@/components/day-header";
+import { HealthConnectCard } from "@/components/health-connect-card";
 import { SleepStageBar } from "@/components/sleep-stage-bar";
 import { SleepInsights } from "@/components/sleep-insights";
 import { Sparkline } from "@/components/sparkline";
@@ -24,6 +25,9 @@ export function TodayPage({ view }: { view: TodayView }) {
       <DayHeader date={view.date} timezone={view.timezone} freshness={view.freshness} />
 
       <main className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+        {/* Only renders in the phone app; nothing on the web. */}
+        <HealthConnectCard />
+
         {/* last night */}
         <section className="panel flex flex-col p-5 lg:col-span-7">
           <div className="mb-4 flex shrink-0 items-center justify-between gap-3">

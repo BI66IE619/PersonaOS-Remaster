@@ -1,5 +1,5 @@
 import { MentorScreen } from "@/components/mentor/mentor-screen";
-import { JournalSync } from "@/components/journal-sync";
+import { AccountSync } from "@/components/account-sync";
 import { getProvider } from "@/lib/providers";
 import { randomOpening } from "@/lib/mentor/openings";
 import { getMentorChats, getMentorSettings, requireUserId } from "@/lib/dal";
@@ -119,7 +119,7 @@ export default async function MentorPage() {
     <>
       {/* The mentor brief reads notes, check-ins and weigh-ins, so bind the
           journal stores to the account before the screen builds its brief. */}
-      <JournalSync userId={userId} />
+      <AccountSync userId={userId} />
       <MentorScreen
         view={view}
         opening={opening}

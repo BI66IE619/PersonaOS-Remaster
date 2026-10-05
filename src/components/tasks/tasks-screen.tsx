@@ -7,33 +7,27 @@ import { TaskList } from "@/components/tasks/task-list";
 import { HabitList } from "@/components/tasks/habit-list";
 import {
   applyRemote,
-  claimTasksOwnership,
   getSnapshot,
   seedSample,
   subscribe,
 } from "@/lib/tasks";
 import {
   applyRemote as applyRemoteHabits,
-  claimHabitsOwnership,
   getSnapshot as habitsSnapshot,
   seedHabits,
   subscribe as subscribeHabits,
 } from "@/lib/habits";
-import { schedulePlansSync } from "@/lib/plans/sync";
 import { EMPTY_TASKS } from "@/lib/types-tasks";
 import { EMPTY_HABITS } from "@/lib/types-habits";
 import type { TodayView } from "@/lib/types";
 
 export function TasksScreen({
   view,
-  userId,
   initialEvents = null,
   initialTasks = null,
   initialHabits = null,
 }: {
   view: TodayView;
-  /** Whose record this tab is allowed to show. Both local stores are bound to it. */
-  userId: string;
   /** The account's plan, read server-side for the first paint. Null when that read
    *  failed, which is not the same as an empty plan — see the effect below. */
   initialEvents?: unknown[] | null;
@@ -45,16 +39,10 @@ export function TasksScreen({
   const [month, setMonth] = useState(view.date.slice(0, 7));
   const [selected, setSelected] = useState(view.date);
 
-  /* Whose record this is, before anything is read out of it or written into it.
-   *
-   * Runs during the first render rather than in an effect, because an effect runs
-   * after the paint: the tab would render one frame with the previous account's
-   * calendar and task list on screen, which is the whole leak this prevents. The
-   * stores are module singletons, so claiming during render is a write during render —
-   * safe here only because the claim is idempotent and the reads that follow it are
-   * the same snapshot every consumer gets. */
-  if (state.owner !== userId) claimTasksOwnership(userId);
-  if (habitState.owner !== userId) claimHabitsOwnership(userId);
+  /* Ownership and the sync schedule live in <AccountSync>, which the page mounts
+     above this screen — the plan stores are read and written from Home too, so
+     binding them here would leave the Home habit panel pushing nothing. This
+     screen only seeds from the server render and draws. */
 
   /* Seed from the server, once.
    *
@@ -91,22 +79,6 @@ export function TasksScreen({
     seedSample(view.date);
     seedHabits(view.date);
   }, [view.date]);
-
-  /* Push whatever changed, and on the first render whether anything did.
-   *
-   * Covers every write path — an event added, edited or removed, a task ticked or
-   * deleted, a habit renamed or a day toggled — because they all go through the
-   * stores, and watching the records rather than each call site means a new kind of
-   * write cannot forget to sync.
-   *
-   * The effects have no dependency on the records themselves on purpose for the first
-   * run: a device whose local plan is already correct has nothing to push and would
-   * otherwise never contact the server, so it would never learn about a task added on
-   * the other device until the user typed something here. */
-  useEffect(() => {
-    if (!seeded.current) return;
-    schedulePlansSync();
-  }, [state, habitState]);
 
   return (
     <PageShell>

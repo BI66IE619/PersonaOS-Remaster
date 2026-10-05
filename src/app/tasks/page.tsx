@@ -1,4 +1,5 @@
 import { TasksScreen } from "@/components/tasks/tasks-screen";
+import { AccountSync } from "@/components/account-sync";
 import { getProvider } from "@/lib/providers";
 import { requireUserId, getPlanEvents, getPlanTasks, getPlanHabits, getPlanHabitDays } from "@/lib/dal";
 
@@ -92,12 +93,16 @@ export default async function TasksPage() {
   const plan = await loadPlan(userId);
 
   return (
-    <TasksScreen
-      view={view}
-      userId={userId}
-      initialEvents={plan?.events ?? null}
-      initialTasks={plan?.tasks ?? null}
-      initialHabits={plan?.habits ?? null}
-    />
+    <>
+      {/* Binds the plan stores to the account and keeps them syncing. Above the
+          screen so the stores are claimed before it reads a snapshot of them. */}
+      <AccountSync userId={userId} />
+      <TasksScreen
+        view={view}
+        initialEvents={plan?.events ?? null}
+        initialTasks={plan?.tasks ?? null}
+        initialHabits={plan?.habits ?? null}
+      />
+    </>
   );
 }

@@ -31,52 +31,73 @@ import {
   getSnapshot as getStrength,
   subscribe as strengthSubscribe,
 } from "@/lib/strength";
+import {
+  claimTasksOwnership,
+  getServerSnapshot as getTasksServer,
+  getSnapshot as getTasks,
+  subscribe as tasksSubscribe,
+} from "@/lib/tasks";
+import {
+  claimHabitsOwnership,
+  getServerSnapshot as getHabitsServer,
+  getSnapshot as getHabits,
+  subscribe as habitsSubscribe,
+} from "@/lib/habits";
 import { scheduleJournalSync, syncJournalNow } from "@/lib/journal/sync";
+import { schedulePlansSync, syncPlansNow } from "@/lib/plans/sync";
 
 /**
- * Binds the journal stores to the signed-in account and keeps them syncing.
+ * Binds every account-owned store to the signed-in user and keeps them syncing.
  *
- * A boundary rather than logic inside each screen, because notes, check-ins and
- * weigh-ins are read from five different tabs (Notes, Vitality, Body, Home and
- * Mentor) and every one of them would otherwise have to remember to claim. It
- * renders nothing; mount it above the screen.
+ * One boundary rather than logic inside each screen, because these stores are read
+ * and written from more than one tab and every one of them would otherwise have to
+ * remember to claim and to schedule. This is not a nicety: the plan stores — tasks,
+ * events and habits — used to be claimed and synced only by the Plan tab, so
+ * checking a habit off on Home changed the local record and pushed nothing, and a
+ * device that only ever opened Home never claimed them at all and showed the sample
+ * data instead of the account's.
  *
- * The claim happens during render, before any sibling reads a snapshot. An effect
- * would be one paint too late: the first frame would show the previous account's
- * journal. The stores are module singletons, so this is a write during render —
- * safe only because the claim is idempotent and every following read is the same
- * snapshot.
+ * The claim happens during render, before any sibling reads a snapshot, so the first
+ * frame does not show the previous account's data. It is idempotent, and the reads
+ * that follow it are the same snapshot every consumer gets.
  */
-export function JournalSync({ userId }: { userId: string }) {
+export function AccountSync({ userId }: { userId: string }) {
   if (getNotes().owner !== userId) claimNotesOwnership(userId);
   if (getCheckIns().owner !== userId) claimCheckInsOwnership(userId);
   if (getWeight().owner !== userId) claimWeightOwnership(userId);
   if (getSports().owner !== userId) claimSportsOwnership(userId);
   if (getStrength().owner !== userId) claimStrengthOwnership(userId);
+  if (getTasks().owner !== userId) claimTasksOwnership(userId);
+  if (getHabits().owner !== userId) claimHabitsOwnership(userId);
 
-  /* Subscribed so every write path — a note saved, a check-in rated, a weight
-     logged or removed, a sport session added or deleted, a set logged or a
-     movement changed — schedules a sync without each call site remembering to. */
+  /* Subscribed so any write path schedules a sync, wherever it happened. */
   const notes = useSyncExternalStore(notesSubscribe, getNotes, getNotesServer);
   const checkins = useSyncExternalStore(checkInsSubscribe, getCheckIns, getCheckInsServer);
   const weight = useSyncExternalStore(weightSubscribe, getWeight, getWeightServer);
   const sports = useSyncExternalStore(sportsSubscribe, getSports, getSportsServer);
   const strength = useSyncExternalStore(strengthSubscribe, getStrength, getStrengthServer);
+  const tasks = useSyncExternalStore(tasksSubscribe, getTasks, getTasksServer);
+  const habits = useSyncExternalStore(habitsSubscribe, getHabits, getHabitsServer);
 
-  /* The first pull is immediate rather than debounced, so a device that already
-     has data server-side does not sit on an empty journal for the debounce
-     window. Every later change coalesces. */
+  /* First pull immediate rather than debounced, so a device that already has data
+     server-side does not sit on an empty screen for the debounce window. */
   const started = useRef(false);
   useEffect(() => {
     if (started.current) return;
     started.current = true;
     void syncJournalNow();
+    void syncPlansNow();
   }, []);
 
   useEffect(() => {
     if (!started.current) return;
     scheduleJournalSync();
   }, [notes, checkins, weight, sports, strength]);
+
+  useEffect(() => {
+    if (!started.current) return;
+    schedulePlansSync();
+  }, [tasks, habits]);
 
   return null;
 }

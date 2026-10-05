@@ -1,5 +1,5 @@
 import { BodyScreen } from "@/components/body/body-screen";
-import { JournalSync } from "@/components/journal-sync";
+import { AccountSync } from "@/components/account-sync";
 import { requireUserId } from "@/lib/dal";
 import { getProvider } from "@/lib/providers";
 
@@ -12,7 +12,7 @@ export default async function BodyPage() {
     <>
       {/* The weigh-in log is read from this page, so bind it to the account
           before BodyScreen renders. */}
-      <JournalSync userId={userId} />
+      <AccountSync userId={userId} />
       <BodyScreen view={view} userId={userId} />
     </>
   );

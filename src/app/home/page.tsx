@@ -1,5 +1,5 @@
 import { HomeScreen } from "@/components/home-screen";
-import { JournalSync } from "@/components/journal-sync";
+import { AccountSync } from "@/components/account-sync";
 import { getProvider } from "@/lib/providers";
 import { buildMoneyView } from "@/lib/finance/view";
 import { generateTransactions } from "@/lib/finance/seed";
@@ -49,7 +49,7 @@ export default async function Home() {
     <>
       {/* Home reads the check-in and weigh-in stores for its Logged today panel,
           so bind them to the account before it renders. */}
-      <JournalSync userId={userId} />
+      <AccountSync userId={userId} />
       <HomeScreen
         view={view}
         welcome={welcome}

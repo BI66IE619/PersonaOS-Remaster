@@ -1,5 +1,5 @@
 import { NotesScreen } from "@/components/notes/notes-screen";
-import { JournalSync } from "@/components/journal-sync";
+import { AccountSync } from "@/components/account-sync";
 import { requireUserId } from "@/lib/dal";
 import { getProvider } from "@/lib/providers";
 
@@ -12,7 +12,7 @@ export default async function NotesPage() {
     <>
       {/* Above the screen, so the journal stores are bound to this account
           before the screen reads a snapshot of them. */}
-      <JournalSync userId={userId} />
+      <AccountSync userId={userId} />
       <NotesScreen today={view.date} />
     </>
   );
