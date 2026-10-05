@@ -6,6 +6,7 @@ import { AppNav } from "@/components/app-nav";
 import { DayRollover } from "@/components/day-rollover";
 import { PageFade } from "@/components/page-fade";
 import { ColdStart } from "@/components/cold-start";
+import { NativeBackgroundSync } from "@/components/native-background-sync";
 import { COLD_ENTRY_PROBE } from "@/lib/cold-entry";
 import "./globals.css";
 
@@ -114,6 +115,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               chrome like the nav, and it mounts once with the layout that owns the
               corner it flies to. */}
           <ColdStart />
+          {/* Hands the session to the background worker so it keeps syncing while
+              the app is closed. Does nothing on the web. */}
+          <NativeBackgroundSync />
           <DayRollover />
           {/* Here rather than in PageShell, because only this survives a
               navigation. Inside a page it was remounted every time, and a remount

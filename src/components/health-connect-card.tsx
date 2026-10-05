@@ -34,24 +34,13 @@ export function HealthConnectCard() {
     const samsung = await syncSamsungHealth(30);
     setBusy(false);
 
-    const parts: string[] = [];
-    parts.push(
-      activity.ok
-        ? `Health Connect: ${activity.daily} days, ${activity.sessions} workouts.`
-        : `Health Connect failed: ${activity.error}`,
-    );
-    parts.push(
-      samsung.ok
-        ? `Samsung Health: ${samsung.daily} days, ${samsung.sessions} workouts.`
-        : `Samsung Health failed: ${samsung.error}`,
-    );
-    if (activity.ok && activity.probe) {
-      parts.push(`HC records: ${JSON.stringify(activity.probe)}`);
-    }
-    if (samsung.ok && samsung.debug?.length) {
-      parts.push(`Samsung issues: ${samsung.debug.slice(0, 4).join(" | ")}`);
-    }
-    setMessage(parts.join("  •  "));
+    /* Only a failure is worth saying. The counts and per-record detail that used to
+       print here were a build-time diagnostic and read as noise once syncing worked;
+       background sync makes the button a fallback, so silence on success is right. */
+    const failures: string[] = [];
+    if (!activity.ok) failures.push(`Health Connect: ${activity.error}`);
+    if (!samsung.ok) failures.push(`Samsung Health: ${samsung.error}`);
+    setMessage(failures.length ? failures.join("  •  ") : null);
 
     /* The data lands on the server, so the server render has to run again. */
     router.refresh();

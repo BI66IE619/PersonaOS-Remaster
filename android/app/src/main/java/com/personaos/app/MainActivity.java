@@ -11,6 +11,7 @@ public class MainActivity extends BridgeActivity {
            super.onCreate, so the bridge knows about them when it starts. */
         registerPlugin(HealthConnectPlugin.class);
         registerPlugin(SamsungHealthPlugin.class);
+        registerPlugin(BackgroundSyncPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

@@ -53,6 +53,8 @@ dependencies {
     // background-read permission we will need for syncing when the app is closed.
     implementation "androidx.health.connect:connect-client:$healthConnectVersion"
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:$coroutinesVersion"
+    // The background sync runs as periodic work, so it survives the app being closed.
+    implementation "androidx.work:work-runtime-ktx:$workVersion"
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
