@@ -24,13 +24,33 @@ type ScaleKey = (typeof SCALES)[number]["key"];
 /** Ten days of history, so the row reads as a rhythm rather than a ledger. */
 const TRACKED = 10;
 
-const DOT: Record<number, string> = {
-  1: "bg-[var(--color-low)]",
-  2: "bg-[var(--color-mid)]",
-  3: "bg-[var(--color-base)]",
-  4: "bg-[var(--color-high)]",
-  5: "bg-[var(--color-high)]",
-};
+/**
+ * How the day went overall, as one of three bands.
+ *
+ * Soreness is inverted: it is the one scale where higher is worse, so a good day is
+ * high energy and mood with low soreness, which is what someone means by a good day.
+ * Without the flip a back-to-front rating would colour as the best kind of day.
+ *
+ * Averaged over the scales actually rated, so a day rated only for energy is not
+ * dragged toward the middle by two blanks — and a day with nothing rated has no band
+ * at all, which the row draws grey rather than guessing.
+ */
+function dayTone(e: CheckIn): "good" | "mid" | "low" {
+  const parts: number[] = [];
+  if (e.energy) parts.push(e.energy);
+  if (e.mood) parts.push(e.mood);
+  if (e.soreness) parts.push(6 - e.soreness);
+  const avg = parts.reduce((a, b) => a + b, 0) / parts.length;
+  if (avg >= 4) return "good";
+  if (avg <= 2) return "low";
+  return "mid";
+}
+
+const TONE_COLOR = {
+  good: "var(--color-good)",
+  mid: "var(--color-mid)",
+  low: "var(--color-low)",
+} as const;
 
 export function CheckInPanel({ today }: { today: string }) {
   const state = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
@@ -141,13 +161,35 @@ export function CheckInPanel({ today }: { today: string }) {
           <ul className="mt-2.5 flex gap-1.5">
             {days.map((d) => {
               const e = byDay(d);
+              const isToday = d === today;
               return (
                 <li key={d} className="flex-1 text-center">
-                  <span className="block text-[9px] text-ink-3">{shortDayLabel(d).slice(0, 1)}</span>
                   <span
-                    title={e ? `${shortDayLabel(d)}: mood ${e.mood || "–"}, energy ${e.energy || "–"}, soreness ${e.soreness || "–"}` : `${shortDayLabel(d)}: not logged`}
-                    className={`mt-1 block h-1.5 rounded-full ${e?.mood ? DOT[e.mood] : "bg-white/[0.07]"}`}
+                    className={`block text-[9px] ${isToday ? "font-semibold text-ink" : "text-ink-3"}`}
+                  >
+                    {shortDayLabel(d).slice(0, 1)}
+                  </span>
+                  {/* One bar per day, coloured by how the day went overall rather
+                      than by a single scale. Grey when nothing was logged, which is
+                      the honest read of a day that has no answer rather than a bad
+                      one. */}
+                  <span
+                    title={
+                      e
+                        ? `${shortDayLabel(d)}: energy ${e.energy || "–"}, mood ${e.mood || "–"}, soreness ${e.soreness || "–"}`
+                        : `${shortDayLabel(d)}: not logged`
+                    }
+                    className="mt-1 block h-1.5 rounded-full"
+                    style={{
+                      background: e ? TONE_COLOR[dayTone(e)] : "var(--color-hairline-strong)",
+                      opacity: e ? 1 : 0.6,
+                    }}
                   />
+                  {/* Today is the first cell at the left of the row, so it needs a
+                      word rather than relying on the position alone. */}
+                  {isToday ? (
+                    <span className="mt-0.5 block text-[8px] leading-none text-ink-3">today</span>
+                  ) : null}
                 </li>
               );
             })}
