@@ -63,13 +63,21 @@ export function MoneyTodayPanel({
         )}
       </div>
 
-      <div className="mt-3 flex items-baseline justify-between gap-3">
-        <span className="num text-[42px] leading-none font-semibold tracking-tight">
-          {cents(todaySpendCents)}
-        </span>
-        <span className="num shrink-0 text-xs text-ink-3">
-          {!linked ? "not linked" : todaySpendCents === 0 ? "nothing spent" : "spent today"}
-        </span>
+      {/* The label is load-bearing. The figure is what has gone OUT today, and with
+          only the panel's own "Money today" heading above it, a large $0.00 read as
+          the account balance — which is the one number on this panel you would least
+          want confused for nothing. Saying "Spent today" outright removes the doubt;
+          the balance keeps its own labelled tile below. */}
+      <div className="mt-3">
+        <div className="text-[11px] text-ink-3">Spent today</div>
+        <div className="mt-1 flex items-baseline justify-between gap-3">
+          <span className="num text-[38px] leading-none font-semibold tracking-tight">
+            {cents(todaySpendCents)}
+          </span>
+          <span className="num shrink-0 text-xs text-ink-3">
+            {todaySpendCents === 0 ? "nothing yet" : "across today"}
+          </span>
+        </div>
       </div>
 
       {/* Spend per day across the month. Occupies the space the panel used to
