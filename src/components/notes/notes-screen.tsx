@@ -283,7 +283,7 @@ export function NotesScreen({ today }: { today: string }) {
                           type="button"
                           onClick={() => removeEntry(e.date)}
                           aria-label={`Delete note for ${shortDayLabel(e.date)}`}
-                          className="mt-2 shrink-0 rounded px-1 text-[11px] text-ink-3 opacity-0 transition-opacity hover:text-[var(--color-low)] focus-visible:opacity-100 group-hover:opacity-100"
+                          className="mt-2 shrink-0 rounded px-1 text-[11px] text-ink-3 opacity-100 transition-opacity hover:text-[var(--color-low)] focus-visible:opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
                         >
                           &#10005;
                         </button>

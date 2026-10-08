@@ -60,7 +60,7 @@ export function SessionDeleteButton({ label, onDelete }: { label: string; onDele
       type="button"
       onClick={onDelete}
       aria-label={label}
-      className="shrink-0 rounded px-1 text-[11px] text-ink-3 opacity-0 transition-opacity hover:text-[var(--color-low)] focus-visible:opacity-100 focus-visible:text-[var(--color-low)] group-hover:opacity-100 group-focus-within:opacity-100"
+      className="shrink-0 rounded px-1 text-[11px] text-ink-3 opacity-100 transition-opacity hover:text-[var(--color-low)] focus-visible:text-[var(--color-low)] md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 md:focus-visible:opacity-100"
     >
       &#10005;
     </button>

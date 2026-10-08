@@ -109,7 +109,7 @@ export function TaskList({ tasks, today }: { tasks: Task[]; today: string }) {
         type="button"
         onClick={() => removeTask(t.id)}
         aria-label={`Delete "${t.title}"`}
-        className="shrink-0 rounded px-1 text-[11px] text-ink-3 opacity-0 transition-opacity hover:text-[var(--color-low)] focus-visible:opacity-100 group-hover:opacity-100"
+        className="shrink-0 rounded px-1 text-[11px] text-ink-3 opacity-100 transition-opacity hover:text-[var(--color-low)] focus-visible:opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
       >
         &#10005;
       </button>
