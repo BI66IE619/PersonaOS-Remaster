@@ -90,6 +90,8 @@ export const notes = pgTable(
       .notNull()
       .references(() => profiles.id, { onDelete: "cascade" }),
     day: date("day").notNull(),
+    /** Optional name for the day's entry. "" when the user has not named it. */
+    title: text("title").notNull().default(""),
     text: text("text").notNull(),
     /** The device's tag list, in the order the user sees it. jsonb rather than a
      *  join table: a tag has no identity of its own, and the whole list is replaced

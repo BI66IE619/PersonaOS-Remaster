@@ -47,13 +47,14 @@ const cleanup = async () => {
 };
 
 try {
-  console.log("notes carry their tags");
+  console.log("notes carry their tags and name");
   await dal.upsertNotes(TEST_USER, [
-    { clientId: DAY, day: DAY, text: "first", tags: ["alpha", "beta"], updatedAt: EARLIER },
+    { clientId: DAY, day: DAY, title: "The first day", text: "first", tags: ["alpha", "beta"], updatedAt: EARLIER },
   ]);
   let notes = await dal.getNotes(TEST_USER);
   check("one row written", notes.length === 1, `${notes.length}`);
   check("the text round-trips", notes[0].text === "first", notes[0].text);
+  check("the title round-trips", notes[0].title === "The first day", notes[0].title);
   check(
     "the tags round-trip as an array",
     Array.isArray(notes[0].tags) && notes[0].tags.join(",") === "alpha,beta",
@@ -61,15 +62,16 @@ try {
   );
 
   await dal.upsertNotes(TEST_USER, [
-    { clientId: DAY, day: DAY, text: "second", tags: ["gamma"], updatedAt: LATER },
+    { clientId: DAY, day: DAY, title: "Renamed", text: "second", tags: ["gamma"], updatedAt: LATER },
   ]);
   notes = await dal.getNotes(TEST_USER);
   check("a re-push is an upsert, not a duplicate", notes.length === 1, `${notes.length}`);
   check("the newer push won", notes[0].text === "second", notes[0].text);
+  check("the newer title won too", notes[0].title === "Renamed", notes[0].title);
   check("the tags were replaced with it", JSON.stringify(notes[0].tags) === '["gamma"]');
 
   await dal.upsertNotes(TEST_USER, [
-    { clientId: DAY, day: DAY, text: "stale", tags: [], updatedAt: EARLIER },
+    { clientId: DAY, day: DAY, title: "", text: "stale", tags: [], updatedAt: EARLIER },
   ]);
   check("an older push is rejected", (await dal.getNotes(TEST_USER))[0].text === "second");
 

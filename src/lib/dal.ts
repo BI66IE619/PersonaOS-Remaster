@@ -632,6 +632,7 @@ export async function upsertNotes(userId: string, pushed: Pushed<typeof schema.n
   const rows = pushed.map((r) => ({
     clientId: r.clientId,
     day: asDay(r.day, r.clientId),
+    title: r.title ?? "",
     text: r.text,
     tags: Array.isArray(r.tags) ? r.tags : [],
     updatedAt: asDate(r.updatedAt),
@@ -644,6 +645,7 @@ export async function upsertNotes(userId: string, pushed: Pushed<typeof schema.n
       set: {
         text: sql`excluded.text`,
         day: sql`excluded.day`,
+        title: sql`excluded.title`,
         tags: sql`excluded.tags`,
         updatedAt: sql`excluded.updated_at`,
         /* Reset, because a push that won the clock comparison is an edit, and an

@@ -57,6 +57,7 @@ function normalizeEntry(raw: unknown): StoredNote | null {
   if (!note.trim()) return null;
   return {
     date: o.date,
+    title: isStr(o.title) ? o.title.slice(0, 200).trim() : "",
     note,
     tags: normalizeTags(o.tags),
     /* A note saved before the clock existed reads as long ago, so a stale push
@@ -165,7 +166,11 @@ export function searchEntries(
   return entries.filter((e) => {
     if (wanted && !e.tags.some((t) => t.toLowerCase() === wanted)) return false;
     if (!q) return true;
-    return e.note.toLowerCase().includes(q) || e.tags.some((t) => t.toLowerCase().includes(q));
+    return (
+      e.note.toLowerCase().includes(q) ||
+      e.title.toLowerCase().includes(q) ||
+      e.tags.some((t) => t.toLowerCase().includes(q))
+    );
   });
 }
 
@@ -234,6 +239,7 @@ export function saveEntry(date: string, patch: Partial<Omit<JournalEntry, "date"
   }
   const next: StoredNote = {
     date,
+    title: isStr(patch.title) ? patch.title.slice(0, 200).trim() : "",
     note,
     tags: normalizeTags(patch.tags),
     updatedAt: stampAfter(existing?.updatedAt),
@@ -281,6 +287,7 @@ function reviveRemote(raw: unknown): StoredNote | null {
   if (!note.trim()) return null;
   return {
     date: day,
+    title: isStr(o.title) ? o.title.slice(0, 200).trim() : "",
     note,
     tags: normalizeTags(o.tags),
     updatedAt: isStr(o.updatedAt) ? o.updatedAt : new Date(0).toISOString(),
@@ -320,6 +327,7 @@ export function notePayload(n: StoredNote) {
   return {
     clientId: n.date,
     day: n.date,
+    title: n.title,
     text: n.note,
     tags: n.tags,
     updatedAt: n.updatedAt,

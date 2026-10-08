@@ -39,6 +39,8 @@ export type Spark = {
 
 export type JournalEntry = {
   date: string;
+  /** Optional name for the day's entry. "" when unnamed. */
+  title: string;
   note: string;
   tags: string[];
 };

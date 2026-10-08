@@ -20,7 +20,7 @@ import {
 } from "@/lib/notes";
 import type { JournalEntry } from "@/lib/types";
 
-const EMPTY = (date: string): JournalEntry => ({ date, note: "", tags: [] });
+const EMPTY = (date: string): JournalEntry => ({ date, title: "", note: "", tags: [] });
 
 export function NotesScreen({ today }: { today: string }) {
   const state = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
@@ -60,7 +60,11 @@ export function NotesScreen({ today }: { today: string }) {
   };
 
   const save = () => {
-    saveEntry(date, { note: entry?.note ?? "", tags: entry?.tags ?? [] });
+    saveEntry(date, {
+      title: entry?.title ?? "",
+      note: entry?.note ?? "",
+      tags: entry?.tags ?? [],
+    });
     setDraft(null);
     setTagDraft("");
     setSaved(true);
@@ -114,6 +118,21 @@ export function NotesScreen({ today }: { today: string }) {
               ) : null}
             </div>
 
+            {/* The entry's name. A journal entry is dated, so this is optional —
+                it exists so a day can be called something, and it shows in the
+                archive and search. */}
+            <input
+              value={entry?.title ?? ""}
+              onChange={(e) => {
+                setSaved(false);
+                setDraft({ ...(entry ?? EMPTY(date)), title: e.target.value });
+              }}
+              placeholder="Name this day (optional)"
+              aria-label="Note title"
+              maxLength={200}
+              className="mt-4 w-full bg-transparent text-lg font-semibold tracking-tight text-ink placeholder:font-normal placeholder:text-ink-3 focus:outline-none"
+            />
+
             <textarea
               value={entry?.note ?? ""}
               onChange={(e) => {
@@ -123,7 +142,7 @@ export function NotesScreen({ today }: { today: string }) {
               placeholder="Anything worth remembering?"
               aria-label="Note"
               rows={12}
-              className="mt-4 w-full resize-y rounded-lg border border-hairline bg-white/[0.07] px-3 py-2.5 text-sm leading-relaxed text-ink placeholder:text-ink-3 focus:border-[var(--color-accent)] focus:outline-none"
+              className="mt-2 w-full resize-y rounded-lg border border-hairline bg-white/[0.07] px-3 py-2.5 text-sm leading-relaxed text-ink placeholder:text-ink-3 focus:border-[var(--color-accent)] focus:outline-none"
             />
 
             {entry?.tags.length ? (
@@ -270,6 +289,11 @@ export function NotesScreen({ today }: { today: string }) {
                           <div className="flex items-baseline justify-between gap-3">
                             <span className="num text-[11px] text-ink-2">{shortDayLabel(e.date)}</span>
                           </div>
+                          {/* The day's name leads when it has one; the date above is
+                              then the fallback identity rather than the heading. */}
+                          {e.title.trim() ? (
+                            <p className="mt-0.5 truncate text-[13px] font-medium text-ink">{e.title}</p>
+                          ) : null}
                           {e.note.trim() ? (
                             <p className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-ink-3">
                               {snippet(e.note, query)}

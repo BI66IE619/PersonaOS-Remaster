@@ -82,6 +82,8 @@ const Row = {
 const NoteRow = z.object({
   ...Row,
   day: Day,
+  /* Optional name for the day's entry. */
+  title: z.string().max(200).default(""),
   text: z.string().max(10_000),
   /* Capped at the store's own limits — 8 tags of 24 characters — so the server
      cannot be made to hold a longer list than any device would ever show. */
