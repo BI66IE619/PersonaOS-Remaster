@@ -12,6 +12,7 @@ interface BackgroundSyncPlugin {
     refreshToken: string;
     apiBase: string;
   }): Promise<void>;
+  getSession(): Promise<{ accessToken?: string; refreshToken?: string }>;
   clearSession(): Promise<void>;
 }
 
@@ -41,25 +42,52 @@ export function NativeBackgroundSync() {
     if (!isNative()) return;
     const supabase = createClient();
 
+    const RESTORE_FLAG = "personaos:session-restored";
+
     const push = async () => {
       try {
         const { data } = await supabase.auth.getSession();
-        const session = data.session;
-        if (!session) return;
-        await bg().setSession({
-          supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
-          anonKey: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "",
-          accessToken: session.access_token,
-          refreshToken: session.refresh_token,
-          apiBase: window.location.origin,
+        if (data.session) {
+          /* Signed in: keep the native copy current for the worker. */
+          sessionStorage.removeItem(RESTORE_FLAG);
+          await bg().setSession({
+            supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+            anonKey: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "",
+            accessToken: data.session.access_token,
+            refreshToken: data.session.refresh_token,
+            apiBase: window.location.origin,
+          });
+          return;
+        }
+
+        /* Signed out in the WebView, but the worker still holds tokens. Android's
+           WebView does not reliably keep the Supabase cookies across a full close,
+           so without this you are sent to Google on every launch. Restore from the
+           native copy instead. The flag stops a reload loop if that also fails. */
+        if (sessionStorage.getItem(RESTORE_FLAG)) return;
+        const stored = await bg().getSession();
+        if (!stored?.accessToken || !stored?.refreshToken) return;
+        const { error } = await supabase.auth.setSession({
+          access_token: stored.accessToken,
+          refresh_token: stored.refreshToken,
         });
+        if (!error) {
+          sessionStorage.setItem(RESTORE_FLAG, "1");
+          window.location.reload();
+        }
       } catch {
         /* The button still works; the worker just won't have a token until next open. */
       }
     };
 
     void push();
-    const { data } = supabase.auth.onAuthStateChange(() => {
+    const { data } = supabase.auth.onAuthStateChange((event) => {
+      /* An explicit sign-out has to clear the native copy too, or the restore below
+         would sign the user straight back in on the next launch. */
+      if (event === "SIGNED_OUT") {
+        void bg().clearSession().catch(() => {});
+        return;
+      }
       void push();
     });
     return () => data.subscription.unsubscribe();

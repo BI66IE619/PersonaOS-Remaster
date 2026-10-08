@@ -35,6 +35,25 @@ class BackgroundSyncPlugin : Plugin() {
         call.resolve()
     }
 
+    /**
+     * The stored session, so the WebView can restore a login the OS did not keep.
+     *
+     * Android's WebView does not reliably persist the Supabase cookies across a full
+     * app close, which shows up as being asked to sign in with Google every launch.
+     * The worker already keeps the tokens here, so the app can re-establish the
+     * session from them instead.
+     */
+    @PluginMethod
+    fun getSession(call: PluginCall) {
+        val stored = SessionStore.load(context)
+        val ret = com.getcapacitor.JSObject()
+        if (stored != null) {
+            ret.put("accessToken", stored.accessToken)
+            ret.put("refreshToken", stored.refreshToken)
+        }
+        call.resolve(ret)
+    }
+
     @PluginMethod
     fun clearSession(call: PluginCall) {
         SessionStore.clear(context)
