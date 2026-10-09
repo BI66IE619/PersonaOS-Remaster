@@ -1,6 +1,7 @@
 import type { DataProvider, TodayView, Workout } from "../types";
-import { addDays, dayKey } from "../dates";
+import { addDays, dayKeyInTz } from "../dates";
 import { round } from "../utils";
+import { requestTimezone } from "../request-tz";
 import { intensityFromHr } from "../sports";
 import {
   buildSparks,
@@ -166,7 +167,7 @@ function partialView(
   now: Date,
   tz: string,
 ): TodayView {
-  const today = dayKey(now);
+  const today = dayKeyInTz(now, tz);
   const body = buildBody(weightLog, today);
 
   const byDay = new Map<string, HealthRow[]>();
@@ -245,17 +246,24 @@ export class SyncProvider implements DataProvider {
     }
 
     const now = new Date();
-    const today = dayKey(now);
+
+    /* The profile is read first because it carries the zone that decides which day
+       "today" is, and every query below is bounded by that day. Taking it from the
+       server's own clock instead files an evening in the US under tomorrow. */
+    const profile = await getProfile(userId);
+    const tz =
+      (await requestTimezone()) ||
+      profile?.timezone ||
+      Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const today = dayKeyInTz(now, tz);
     /* Both reads take an exclusive lower bound, hence the extra day. */
     const fromDay = addDays(today, -WINDOW_DAYS);
 
-    const [rows, sessions, profile, weightLog] = await Promise.all([
+    const [rows, sessions, weightLog] = await Promise.all([
       getHealthDaily(userId, fromDay, today),
       getHealthSessions(userId, fromDay, today),
-      getProfile(userId),
       getWeightLog(userId, addDays(today, -BODY_WINDOW_DAYS)),
     ]);
-    const tz = profile?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
 
     /* No real readings yet: show nothing rather than an invented day. */
     if (rows.length === 0) return emptyTodayView(now, tz);
@@ -336,7 +344,7 @@ export class SyncProvider implements DataProvider {
         latestAt: wakeTimeUtc.toISOString(),
         isStale: now.getTime() - wakeTimeUtc.getTime() > STALE_AFTER_MS,
       },
-      timezone: profile?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+      timezone: tz,
     };
   }
 }

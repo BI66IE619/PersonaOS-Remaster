@@ -21,8 +21,8 @@ const SCALES = [
 
 type ScaleKey = (typeof SCALES)[number]["key"];
 
-/** Ten days of history, so the row reads as a rhythm rather than a ledger. */
-const TRACKED = 10;
+/** A week of history, so the row reads as a rhythm rather than a ledger. */
+const TRACKED = 7;
 
 /**
  * How the day went overall, as one of three bands.

@@ -3,6 +3,35 @@ export function dayKey(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+/**
+ * Key for a calendar day in a specific IANA timezone.
+ *
+ * The server runs in UTC, so dayKey(new Date()) taken there is the wrong day for
+ * anyone east or west of it: an evening in the US is already tomorrow in UTC, and
+ * a Thursday check-in gets filed under Friday. Formatting through the zone is what
+ * turns the server's own clock into the day the user is actually living in. An
+ * unrecognised zone falls back to the server day rather than throwing, because a
+ * day that is merely off beats a page that will not render.
+ */
+export function dayKeyInTz(d: Date, timeZone: string): string {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(d);
+    const at = (type: string) => parts.find((p) => p.type === type)?.value;
+    const y = at("year");
+    const m = at("month");
+    const day = at("day");
+    if (!y || !m || !day) return dayKey(d);
+    return `${y}-${m}-${day}`;
+  } catch {
+    return dayKey(d);
+  }
+}
+
 export function monthKey(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
 }

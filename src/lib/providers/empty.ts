@@ -1,5 +1,5 @@
 import type { TodayView } from "../types";
-import { dayKey } from "../dates";
+import { dayKeyInTz } from "../dates";
 
 /**
  * The honest empty view: what the app shows when there is no real data yet.
@@ -14,7 +14,7 @@ import { dayKey } from "../dates";
 const STEP_GOAL = 9000;
 
 export function emptyTodayView(now: Date = new Date(), timezone = "UTC"): TodayView {
-  const date = dayKey(now);
+  const date = dayKeyInTz(now, timezone);
   const iso = now.toISOString();
   return {
     date,
