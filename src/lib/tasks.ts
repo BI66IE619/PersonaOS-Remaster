@@ -179,6 +179,7 @@ export function addTaskPure(
   title: string,
   due: string | null,
   category: TaskCategory = "other",
+  subject = "",
 ): TasksState {
   const stamp = new Date().toISOString();
   return {
@@ -193,7 +194,11 @@ export function addTaskPure(
         done: false,
         createdAt: stamp,
         updatedAt: stamp,
-        note: "",
+        /* The note column carries an assignment's subject. It is already
+           persisted and synced, nothing else reads it, and a subject is the one
+           extra thing the assignments box collects — so a whole new column and
+           migration would buy nothing. Capped like every other free-text field. */
+        note: subject.slice(0, 500),
         category: normalizeTaskCategory(category),
       },
     ],
@@ -414,8 +419,13 @@ export function removeEvent(id: string) {
   store.update((s) => removeEventPure(s, id));
 }
 
-export function addTask(title: string, due: string | null, category: TaskCategory = "other") {
-  store.update((s) => addTaskPure(s, title, due, category));
+export function addTask(
+  title: string,
+  due: string | null,
+  category: TaskCategory = "other",
+  subject = "",
+) {
+  store.update((s) => addTaskPure(s, title, due, category, subject));
 }
 
 export function toggleTask(id: string) {

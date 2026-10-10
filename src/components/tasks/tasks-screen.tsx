@@ -3,10 +3,11 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { PageShell } from "@/components/page-shell";
 import { MonthCalendar } from "@/components/tasks/month-calendar";
-import { TaskList } from "@/components/tasks/task-list";
+import { TaskPanel } from "@/components/tasks/task-panel";
 import { HabitList } from "@/components/tasks/habit-list";
 import {
   applyRemote,
+  clearAll,
   getSnapshot,
   subscribe,
 } from "@/lib/tasks";
@@ -36,6 +37,13 @@ export function TasksScreen({
   const habitState = useSyncExternalStore(subscribeHabits, habitsSnapshot, () => EMPTY_HABITS);
   const [month, setMonth] = useState(view.date.slice(0, 7));
   const [selected, setSelected] = useState(view.date);
+
+  /* Two boxes rather than one list: assignments carry a subject that an ordinary
+     to-do does not, so mixing them put a field on rows that would never use it.
+     The split is by category, and "personal" and "other" share a box because the
+     difference between them is a tag, not a shape. */
+  const assignments = state.tasks.filter((t) => t.category === "assignments");
+  const personalOther = state.tasks.filter((t) => t.category !== "assignments");
 
   /* Ownership and the sync schedule live in <AccountSync>, which the page mounts
      above this screen — the plan stores are read and written from Home too, so
@@ -88,8 +96,40 @@ export function TasksScreen({
             />
           </section>
 
-          <section className="lg:col-span-4">
-            <TaskList tasks={state.tasks} today={view.date} />
+          <section className="space-y-4 lg:col-span-4">
+            <TaskPanel
+              label="Personal & other"
+              tasks={personalOther}
+              today={view.date}
+              categories={["personal", "other"]}
+              addPlaceholder="Add a task"
+              emptyTitle="No tasks yet."
+              emptyDetail="Add whatever you want to keep track of. A due date is optional, and anything without one waits until you are ready for it."
+            />
+
+            <TaskPanel
+              label="Assignments"
+              tasks={assignments}
+              today={view.date}
+              categories={["assignments"]}
+              subject
+              addPlaceholder="Add an assignment"
+              emptyTitle="No assignments yet."
+              emptyDetail="Give each one a name, a subject and a due date so you can see what is coming."
+            />
+
+            {/* One clear for both boxes. clearAll wipes the calendar entries too,
+                which is why it sits outside either panel and says "everything"
+                rather than "all tasks". */}
+            {state.tasks.length ? (
+              <button
+                type="button"
+                onClick={clearAll}
+                className="w-full text-left text-[11px] text-ink-3 transition-colors hover:text-[var(--color-low)]"
+              >
+                Clear everything
+              </button>
+            ) : null}
           </section>
 
           <section className="lg:col-span-12">
