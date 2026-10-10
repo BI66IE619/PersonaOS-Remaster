@@ -85,7 +85,9 @@ export function CheckInPanel({ today }: { today: string }) {
      would disable the only control that could remove the row. */
   const canSave = rated || !!stored;
 
-  const days = Array.from({ length: TRACKED }, (_, i) => addDays(today, -i));
+  /* Oldest on the left, today on the right, so the row reads left to right the
+     way a week does. */
+  const days = Array.from({ length: TRACKED }, (_, i) => addDays(today, i - (TRACKED - 1)));
   const byDay = (d: string) => byDate(state.entries, d);
 
   return (
@@ -185,7 +187,7 @@ export function CheckInPanel({ today }: { today: string }) {
                       opacity: e ? 1 : 0.6,
                     }}
                   />
-                  {/* Today is the first cell at the left of the row, so it needs a
+                  {/* Today is the last cell at the right of the row, so it needs a
                       word rather than relying on the position alone. */}
                   {isToday ? (
                     <span className="mt-0.5 block text-[8px] leading-none text-ink-3">today</span>
