@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { addHabit, removeHabit, toggleHabit } from "@/lib/habits";
+import { addHabit, removeHabit, renameHabit, toggleHabit } from "@/lib/habits";
 import { bestStreak, currentStreak } from "@/lib/streaks";
 import { addDays } from "@/lib/dates";
 import { EmptyState } from "@/components/empty-state";
@@ -39,6 +39,21 @@ function Cross() {
   );
 }
 
+function Pencil() {
+  return (
+    <svg viewBox="0 0 12 12" aria-hidden className="h-3 w-3">
+      <path
+        d="M2.6 9.4l.3-1.4 5-5 1.1 1.1-5 5-1.4.3z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.1"
+        strokeLinejoin="round"
+      />
+      <path d="M7.4 3.5l1.1 1.1" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function HabitRow({
   habit,
   today,
@@ -52,6 +67,44 @@ function HabitRow({
   const streak = currentStreak(habit.days, today);
   const best = bestStreak(habit.days);
   const doneToday = done.has(today);
+
+  /* Renaming edits in place rather than routing through the delete dialog: the
+     whole point is that the history stays put, so there is nothing to warn about
+     and nothing to lose. Enter and blur commit; Escape backs out, and the skip
+     flag keeps the blur that follows the unmount from committing the abandoned
+     edit. */
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(habit.name);
+  const field = useRef<HTMLInputElement>(null);
+  const skipBlur = useRef(false);
+
+  useEffect(() => {
+    if (!editing) return;
+    const el = field.current;
+    el?.focus();
+    el?.select();
+  }, [editing]);
+
+  const startEdit = () => {
+    setDraft(habit.name);
+    setEditing(true);
+  };
+
+  const commit = () => {
+    if (skipBlur.current) {
+      skipBlur.current = false;
+      return;
+    }
+    const value = draft.trim();
+    if (value && value !== habit.name) renameHabit(habit.id, value);
+    setEditing(false);
+  };
+
+  const cancel = () => {
+    skipBlur.current = true;
+    setDraft(habit.name);
+    setEditing(false);
+  };
 
   return (
     <li className="flex items-center gap-4 py-3.5 first:pt-1">
@@ -72,7 +125,32 @@ function HabitRow({
       </button>
 
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[13px] text-ink-2">{habit.name}</p>
+        {editing ? (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              commit();
+            }}
+          >
+            <input
+              ref={field}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={commit}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  cancel();
+                }
+              }}
+              aria-label="Habit name"
+              maxLength={60}
+              className="w-full border-b border-hairline-strong bg-transparent pb-0.5 text-[13px] text-ink outline-none focus:border-[var(--color-accent)]"
+            />
+          </form>
+        ) : (
+          <p className="truncate text-[13px] text-ink-2">{habit.name}</p>
+        )}
         <p className="num mt-0.5 text-[10px] text-ink-3">{streakLabel(streak)}</p>
       </div>
 
@@ -97,14 +175,24 @@ function HabitRow({
           <p className="num text-[15px] leading-none text-ink-3">{best}</p>
           <p className="mt-1 text-[9px] uppercase tracking-wider text-ink-3">best</p>
         </div>
-        <button
-          type="button"
-          aria-label={`Delete habit "${habit.name}"`}
-          onClick={() => onAskDelete(habit)}
-          className="grid h-6 w-6 place-items-center rounded-full text-ink-3 transition-colors hover:bg-white/[0.07] hover:text-ink-2"
-        >
-          <Cross />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            aria-label={`Rename habit "${habit.name}"`}
+            onClick={startEdit}
+            className="grid h-6 w-6 place-items-center rounded-full text-ink-3 transition-colors hover:bg-white/[0.07] hover:text-ink-2"
+          >
+            <Pencil />
+          </button>
+          <button
+            type="button"
+            aria-label={`Delete habit "${habit.name}"`}
+            onClick={() => onAskDelete(habit)}
+            className="grid h-6 w-6 place-items-center rounded-full text-ink-3 transition-colors hover:bg-white/[0.07] hover:text-ink-2"
+          >
+            <Cross />
+          </button>
+        </div>
       </div>
     </li>
   );

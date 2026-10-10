@@ -29,6 +29,7 @@ import {
   habitPayload,
   mergeRemote as mergeHabits,
   removeHabitPure,
+  renameHabitPure,
   revive as reviveHabits,
   toggleHabitPure,
 } from "../src/lib/habits.ts";
@@ -359,6 +360,23 @@ console.log("\nplan sync: the merge, the payloads, the tombstones\n");
     "a pull with nothing in it changes nothing",
     mergeHabits(local, { habits: [], deleted: [] }) === local,
   );
+}
+
+/* ---- 12b. renaming in place keeps the grid ---- */
+{
+  let local = addHabitPure(EMPTY_HABITS, "Read");
+  const id = local.habits[0].id;
+  const tracked = toggleHabitPure(local, id, DAY);
+  const renamed = renameHabitPure(tracked, id, "  Read every day  ");
+
+  check("a rename takes the trimmed name", renamed.habits[0].name === "Read every day");
+  check("and keeps the days", renamed.habits[0].days.includes(DAY));
+  check(
+    "and moves the clock so it travels",
+    renamed.habits[0].updatedAt > tracked.habits[0].updatedAt,
+  );
+  check("a blank rename is ignored", renameHabitPure(tracked, id, "   ") === tracked);
+  check("and an unknown id is ignored", renameHabitPure(tracked, "nope", "X") === tracked);
 }
 
 /* ---- 13. a deleted habit takes its grid with it ---- */

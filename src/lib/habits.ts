@@ -133,6 +133,27 @@ export function toggleHabitPure(state: HabitsState, id: string, day: string): Ha
   };
 }
 
+/**
+ * Rename a habit, moving the clock so the new name can travel.
+ *
+ * The habit is the conflict unit, so a rename stamps the same clock a toggle
+ * does and lets the usual strictly-newer-wins rule carry it. The days, the streak
+ * and the best all stay exactly where they were — which is the entire reason to
+ * rename in place rather than delete the habit and build its history again.
+ */
+export function renameHabitPure(state: HabitsState, id: string, name: string): HabitsState {
+  const trimmed = name.trim();
+  if (!trimmed) return state;
+  if (!state.habits.some((h) => h.id === id)) return state;
+  return {
+    ...state,
+    seeded: true,
+    habits: state.habits.map((h) =>
+      h.id === id ? { ...h, name: trimmed.slice(0, 60), updatedAt: stampAfter(h.updatedAt) } : h,
+    ),
+  };
+}
+
 export function removeHabitPure(state: HabitsState, id: string): HabitsState {
   if (!state.habits.some((h) => h.id === id)) return state;
   return {
@@ -247,6 +268,10 @@ export function addHabit(name: string) {
 
 export function toggleHabit(id: string, day: string) {
   store.update((s) => toggleHabitPure(s, id, day));
+}
+
+export function renameHabit(id: string, name: string) {
+  store.update((s) => renameHabitPure(s, id, name));
 }
 
 export function removeHabit(id: string) {
