@@ -151,6 +151,31 @@ function mergeDay(rows: HealthRow[]): MergedDay {
 }
 
 /**
+ * The newest clock among the rows that came back — effectively when the phone
+ * last posted.
+ *
+ * Every sync re-reads the window and restamps each row it sends, so the maximum
+ * over the rows is the sync time, not the morning's. This, rather than the
+ * sleep's wake time, is what the header's freshness chip reads: "when did data
+ * last arrive" rather than "how old is the newest night". The two were the same
+ * number only until a sync mid-day restamped the rows without moving the wake
+ * time, at which point the chip sat pinned to "11h ago" while a sync had
+ * obviously just run.
+ */
+function latestStamp(rows: HealthRow[], sessions: HealthSessionRow[]): Date | null {
+  let max = 0;
+  for (const r of rows) {
+    const t = r.updatedAt.getTime();
+    if (t > max) max = t;
+  }
+  for (const s of sessions) {
+    const t = s.updatedAt.getTime();
+    if (t > max) max = t;
+  }
+  return max ? new Date(max) : null;
+}
+
+/**
  * What the app shows when there is activity but not enough to score readiness.
  *
  * Readiness is a trained signal — it needs sleep, its stages, HRV and resting
@@ -169,6 +194,7 @@ function partialView(
 ): TodayView {
   const today = dayKeyInTz(now, tz);
   const body = buildBody(weightLog, today);
+  const syncedAt = latestStamp(rows, sessions) ?? now;
 
   const byDay = new Map<string, HealthRow[]>();
   for (const row of rows) {
@@ -221,7 +247,10 @@ function partialView(
     body,
     sparks: [],
     sleepSeries: [],
-    freshness: { latestAt: now.toISOString(), isStale: true },
+    freshness: {
+      latestAt: syncedAt.toISOString(),
+      isStale: now.getTime() - syncedAt.getTime() > STALE_AFTER_MS,
+    },
     timezone: tz,
   };
 }
@@ -300,14 +329,15 @@ export class SyncProvider implements DataProvider {
     /* Same day-of-year rotation the mock uses, so the phrasing varies without
        reading as canned. */
     const variant = Math.floor(now.getTime() / 86_400_000) % 3;
-    const wakeTimeUtc = new Date(latest.sleep.wakeTimeUtc);
+    /* When the phone last posted, for the header's freshness chip. The age of the
+       newest night is a different question and no longer what that chip answers. */
+    const syncedAt = latestStamp(rows, sessions) ?? now;
 
     return {
       /* Today's date, not the date of the newest night. Every other panel in the
          app — agenda, habits, check-ins — is keyed to today, and pointing them at
-         a stale day would show the wrong plan. The distance between now and the
-         newest night is what `freshness` exists to report, and the header already
-         renders it as a stale chip. */
+         a stale day would show the wrong plan. `freshness` reports how long ago
+         data last arrived, and the header renders it as a stale chip. */
       date: today,
       readiness,
       verdict: buildVerdict({
@@ -341,8 +371,8 @@ export class SyncProvider implements DataProvider {
       sparks: buildSparks(history, baselines),
       sleepSeries: history.map((d) => ({ date: d.date, totalMin: d.sleep.totalMin })),
       freshness: {
-        latestAt: wakeTimeUtc.toISOString(),
-        isStale: now.getTime() - wakeTimeUtc.getTime() > STALE_AFTER_MS,
+        latestAt: syncedAt.toISOString(),
+        isStale: now.getTime() - syncedAt.getTime() > STALE_AFTER_MS,
       },
       timezone: tz,
     };
