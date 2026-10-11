@@ -220,9 +220,9 @@ function slopePerWeek(points: { day: number; lb: number }[]): number | null {
  * whatever you had for dinner; the slope is the only version of this number
  * that survives a bad night.
  *
- * Weigh-ins land every other week, so "recent" is a four-week window rather
- * than a fortnight — otherwise the recent change is usually just two points
- * and says nothing. Holding is called out separately from falling, because a
+ * Weigh-ins land once a week, so "recent" is a four-week window — enough points
+ * for a line to mean something, where a fortnight would usually be two and say
+ * nothing. Holding is called out separately from falling, because a
  * plateau after real progress is the moment worth knowing about and "you are
  * down 4lb" would hide it completely.
  */

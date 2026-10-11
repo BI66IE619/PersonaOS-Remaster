@@ -2,9 +2,8 @@
 
 import { useState, useSyncExternalStore } from "react";
 import { Sparkline } from "@/components/sparkline";
-import { addDays } from "@/lib/dates";
+import { daysBetween } from "@/lib/dates";
 import {
-  CADENCE_DAYS,
   EMPTY_LOGS,
   getServerSnapshot,
   getSnapshot,
@@ -31,7 +30,7 @@ export function WeightLog({ date }: { date: string }) {
 
   const dates = Object.keys(logs).sort();
   const latest = dates[dates.length - 1] ?? null;
-  const { due, daysSince } = weightDue(logs, date);
+  const { due, daysSince, next } = weightDue(logs, date);
   const loggedToday = date in logs;
 
   const save = () => {
@@ -61,11 +60,11 @@ export function WeightLog({ date }: { date: string }) {
             ? "no weigh-ins yet"
             : due
               ? "due now"
-              : `next ${shortDate(addDays(latest, CADENCE_DAYS))} · ${CADENCE_DAYS - daysSince}d`}
+              : `next ${shortDate(next)} · ${daysBetween(date, next)}d`}
         </span>
       </div>
 
-      <p className="mt-2 text-xs text-ink-3">Every other week is enough to see the trend.</p>
+      <p className="mt-2 text-xs text-ink-3">Once a week is enough to see the trend.</p>
 
       <div className="mt-4 flex gap-2">
         <input
@@ -144,7 +143,7 @@ export function WeightLog({ date }: { date: string }) {
         </ul>
       ) : (
         <p className="mt-4 text-xs text-ink-3">
-          Weigh in every other week and the trend builds itself.
+          Weigh in each Monday and the trend builds itself.
         </p>
       )}
     </div>

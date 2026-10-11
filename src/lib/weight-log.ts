@@ -1,5 +1,5 @@
 import { createStore } from "./create-store";
-import { daysBetween } from "./dates";
+import { addDays, daysBetween, weekStart } from "./dates";
 import { MAX_PENDING_DELETES, reviveIds, stampAfter } from "./sync-stamp";
 
 const KEY = "personaos:weight-log";
@@ -142,23 +142,35 @@ export function removeWeight(date: string) {
   });
 }
 
-/** Weigh in every other week. The Logged today row and the countdown on the log
- *  both read this, so the prompt on Home and the log itself cannot disagree. */
-export const CADENCE_DAYS = 14;
+/** A week. The prompt is anchored to the calendar rather than counted off the
+ *  last reading, so it lands on Monday morning every week instead of drifting to
+ *  whatever weekday the previous weigh-in happened to fall on. */
+export const CADENCE_DAYS = 7;
 
 /**
- * Whether a weigh-in is due: never logged one, or the last was at least a
- * cadence ago. Future-dated entries are ignored when working out the last one,
- * so a stray bad date cannot quietly suppress the prompt forever.
+ * Whether a weigh-in is due: never logged one, or the last was before this week
+ * began. Future-dated entries are ignored when working out the last one, so a
+ * stray bad date cannot quietly suppress the prompt forever.
+ *
+ * `next` is the Monday after this week's, which the countdown prints. It is the
+ * same value whether or not a weigh-in is outstanding, because "when should I
+ * next weigh in" has one answer: next Monday.
  */
-export function weightDue(logs: WeightLogs, today: string): { due: boolean; daysSince: number | null } {
+export function weightDue(
+  logs: WeightLogs,
+  today: string,
+): { due: boolean; daysSince: number | null; next: string } {
+  const monday = weekStart(today);
+  const next = addDays(monday, CADENCE_DAYS);
   const past = Object.keys(logs)
     .filter((d) => d <= today)
     .sort();
   const latest = past[past.length - 1];
-  if (!latest) return { due: true, daysSince: null };
+  if (!latest) return { due: true, daysSince: null, next };
   const daysSince = daysBetween(latest, today);
-  return { due: daysSince >= CADENCE_DAYS, daysSince };
+  /* Due once the week has turned over without a reading in it. Log it any day of
+     the week and the next one waits for the following Monday. */
+  return { due: latest < monday, daysSince, next };
 }
 
 /* --------------------------------------------------------------------------
