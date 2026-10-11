@@ -129,12 +129,12 @@ async function syncNow(): Promise<void> {
     if (Array.isArray(body.habits) || Array.isArray(body.deleted)) {
       applyHabitRemote({
         habits: body.habits ?? [],
-        /* Habit ids come back namespaced as `habit:` because an event, a task and a
-           habit can all hold the same eight characters. Stripped here and the event
-           and task prefixes left for the other store to ignore. */
-        deleted: (body.deleted ?? [])
-          .filter((d): d is string => typeof d === "string" && d.startsWith("habit:"))
-          .map((d) => d.slice(6)),
+        /* Passed through untouched. The store's merge is what picks out the `habit:`
+           prefix and ignores the rest, exactly as the task store picks out `task:`
+           and `event:`. Stripping the prefix here as well meant the store then
+           looked for a prefix that was already gone — so a habit deleted on one
+           device never disappeared on the other. */
+        deleted: body.deleted ?? [],
       });
     }
 
