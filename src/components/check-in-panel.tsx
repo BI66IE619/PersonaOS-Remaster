@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { addDays, shortDayLabel } from "@/lib/dates";
 import {
   byDate,
@@ -11,6 +11,7 @@ import {
   saveCheckIn,
   subscribe,
 } from "@/lib/checkins";
+import { solid } from "@/lib/theme";
 import type { CheckIn } from "@/lib/types";
 
 const SCALES = [
@@ -52,10 +53,91 @@ const TONE_COLOR = {
   low: "var(--color-low)",
 } as const;
 
+/**
+ * The confirmation in front of wiping every check-in.
+ *
+ * Clearing is a bulk, irreversible delete: it takes the whole history the trend row
+ * is drawn from, and there is nothing left to rebuild it from. So it asks first,
+ * names how many days are about to go, and starts focus on the safe choice — "Keep
+ * them" — so a stray Enter keeps the record rather than throwing it away. Same
+ * shape as the habit delete dialog, so the two bulk actions in the app behave alike.
+ */
+function ConfirmClearCheckIns({
+  count,
+  onCancel,
+  onConfirm,
+}: {
+  count: number;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const keep = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    keep.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCancel();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center p-4"
+      style={solid.overlay}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Clear all check-ins"
+    >
+      <div className="w-full max-w-sm p-5" style={solid.card}>
+        <span className="label-xs">Are you sure?</span>
+
+        <p className="mt-3 text-sm text-ink">
+          Clear all {count} check-in{count === 1 ? "" : "s"}?
+        </p>
+
+        <p className="mt-2 text-[11px] leading-relaxed text-ink-3">
+          That removes every rated day — the energy, mood and soreness history the row
+          above is drawn from. There is no undo.
+        </p>
+
+        <div className="mt-4 flex items-center justify-end gap-2">
+          <button
+            ref={keep}
+            type="button"
+            onClick={onCancel}
+            className="rounded-md border border-hairline px-3 py-1.5 text-[11px] text-ink-3 transition-colors hover:border-[var(--color-accent)]"
+          >
+            Keep them
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="rounded-md border px-3 py-1.5 text-[11px] font-medium text-ink transition-colors"
+            style={{ borderColor: "var(--color-low)" }}
+          >
+            Clear all
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function CheckInPanel({ today }: { today: string }) {
   const state = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   const [draft, setDraft] = useState<CheckIn | null>(null);
   const [saved, setSaved] = useState(false);
+  const [askingClear, setAskingClear] = useState(false);
+
+  /* Stable, so the dialog's focus and Escape listener are not torn down and set up
+     again on every keystroke anywhere above it. */
+  const cancelClear = useCallback(() => setAskingClear(false), []);
+  const confirmClear = useCallback(() => {
+    clearCheckIns();
+    setAskingClear(false);
+  }, []);
 
   const stored = byDate(state.entries, today);
   /* Nothing is ever filled in for the user. The scales start blank on a day they
@@ -199,13 +281,21 @@ export function CheckInPanel({ today }: { today: string }) {
           {state.entries.length ? (
             <button
               type="button"
-              onClick={clearCheckIns}
+              onClick={() => setAskingClear(true)}
               className="mt-3 self-start text-[11px] text-ink-3 transition-colors hover:text-[var(--color-low)]"
             >
               Clear all check-ins
             </button>
           ) : null}
         </div>
+      ) : null}
+
+      {askingClear ? (
+        <ConfirmClearCheckIns
+          count={state.entries.length}
+          onCancel={cancelClear}
+          onConfirm={confirmClear}
+        />
       ) : null}
     </section>
   );
