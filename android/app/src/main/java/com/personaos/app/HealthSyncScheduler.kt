@@ -13,10 +13,13 @@ import java.util.concurrent.TimeUnit
 /**
  * Schedules the periodic health sync.
  *
- * Six hours rather than the fifteen-minute minimum: the inputs are a night's sleep
- * and a day's steps, neither of which changes meaningfully faster, and a tighter
- * interval is battery and quota spent for nothing. `UPDATE` rather than `KEEP` so a
- * changed interval or constraints takes effect on the next app open.
+ * Fifteen minutes, which is WorkManager's floor for periodic work — as close to
+ * "constantly" as Android allows without a foreground service and the permanent
+ * notification that comes with it. The cost is real: the phone wakes, reads both
+ * health sources and posts on every window, so this trades battery for freshness on
+ * purpose. It is still best-effort — Doze and the CONNECTED constraint defer a run,
+ * and nothing syncs while the phone is idle or offline. `UPDATE` rather than `KEEP`
+ * so a changed interval or constraints takes effect on the next app open.
  */
 object HealthSyncScheduler {
     private const val WORK_NAME = "personaos-health-sync"
@@ -26,7 +29,7 @@ object HealthSyncScheduler {
         .build()
 
     fun schedule(context: Context) {
-        val request = PeriodicWorkRequestBuilder<HealthSyncWorker>(6, TimeUnit.HOURS)
+        val request = PeriodicWorkRequestBuilder<HealthSyncWorker>(15, TimeUnit.MINUTES)
             .setConstraints(connected)
             .build()
         WorkManager.getInstance(context)
