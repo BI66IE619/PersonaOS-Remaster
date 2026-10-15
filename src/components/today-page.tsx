@@ -92,7 +92,7 @@ export function TodayPage({ view }: { view: TodayView }) {
         </section>
 
         {/* how the day actually felt */}
-        <CheckInPanel today={view.date} />
+        <CheckInPanel key={view.date} today={view.date} />
 
         <SleepInsights series={view.sleepSeries} />
 

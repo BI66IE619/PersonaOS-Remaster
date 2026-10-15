@@ -53,6 +53,14 @@ const TONE_COLOR = {
   low: "var(--color-low)",
 } as const;
 
+/** "Thursday", for the heading while a past day is being shown. */
+function weekdayName(date: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    timeZone: "UTC",
+  }).format(new Date(`${date}T12:00:00Z`));
+}
+
 /**
  * The confirmation in front of wiping every check-in.
  *
@@ -139,7 +147,19 @@ export function CheckInPanel({ today }: { today: string }) {
     setAskingClear(false);
   }, []);
 
-  const stored = byDate(state.entries, today);
+  /* Which day the scales are editing. Starts on today and follows a tap on the
+     history row, so a past day can be read — and corrected — without deleting and
+     recreating it. The parent keys this component on the date, so a day rollover
+     remounts it back on the new today rather than leaving the old one selected. */
+  const [selected, setSelected] = useState(today);
+  const select = (d: string) => {
+    if (d === selected) return;
+    setSelected(d);
+    setDraft(null);
+    setSaved(false);
+  };
+
+  const stored = byDate(state.entries, selected);
   /* Nothing is ever filled in for the user. The scales start blank on a day they
      have not logged, which also means Save stays disabled until something is
      genuinely rated rather than offering to commit values on their behalf. */
@@ -147,16 +167,16 @@ export function CheckInPanel({ today }: { today: string }) {
 
   const rate = (key: ScaleKey, n: number) => {
     setSaved(false);
-    const base = entry ?? { date: today, energy: 0, mood: 0, soreness: 0 };
+    const base = entry ?? { date: selected, energy: 0, mood: 0, soreness: 0 };
     const current = base[key] ?? 0;
     /* 0 means "not rated", so tapping the active rating has to clear it again
        or a mis-tap can never be undone. */
-    setDraft({ ...base, date: today, [key]: current === n ? 0 : n });
+    setDraft({ ...base, date: selected, [key]: current === n ? 0 : n });
   };
 
   const save = () => {
     if (!entry) return;
-    saveCheckIn(today, { energy: entry.energy, mood: entry.mood, soreness: entry.soreness });
+    saveCheckIn(selected, { energy: entry.energy, mood: entry.mood, soreness: entry.soreness });
     setDraft(null);
     setSaved(true);
   };
@@ -176,9 +196,19 @@ export function CheckInPanel({ today }: { today: string }) {
     <section className="panel p-5 lg:col-span-5" aria-labelledby="checkin-heading">
       <div className="flex items-baseline justify-between gap-3">
         <h2 id="checkin-heading" className="panel-title">
-          How&apos;d today go
+          {selected === today ? "How'd today go" : `How'd ${weekdayName(selected)} go`}
         </h2>
-        {saved ? <span className="text-[11px] text-ink-3">Saved</span> : null}
+        {selected !== today ? (
+          <button
+            type="button"
+            onClick={() => select(today)}
+            className="text-[11px] text-ink-3 transition-colors hover:text-ink-2"
+          >
+            Back to today
+          </button>
+        ) : saved ? (
+          <span className="text-[11px] text-ink-3">Saved</span>
+        ) : null}
       </div>
 
       <div className="mt-4 space-y-3">
@@ -223,13 +253,13 @@ export function CheckInPanel({ today }: { today: string }) {
           <button
             type="button"
             onClick={() => {
-              removeCheckIn(today);
+              removeCheckIn(selected);
               setDraft(null);
               setSaved(false);
             }}
             className="text-[11px] text-ink-3 transition-colors hover:text-[var(--color-low)]"
           >
-            Clear today
+            {selected === today ? "Clear today" : "Clear this day"}
           </button>
         ) : null}
       </div>
@@ -247,33 +277,48 @@ export function CheckInPanel({ today }: { today: string }) {
               const e = byDay(d);
               const isToday = d === today;
               return (
-                <li key={d} className="flex-1 text-center">
-                  <span
-                    className={`block text-[9px] ${isToday ? "font-semibold text-ink" : "text-ink-3"}`}
-                  >
-                    {shortDayLabel(d).slice(0, 1)}
-                  </span>
-                  {/* One bar per day, coloured by how the day went overall rather
-                      than by a single scale. Grey when nothing was logged, which is
-                      the honest read of a day that has no answer rather than a bad
-                      one. */}
-                  <span
-                    title={
+                <li key={d} className="flex-1">
+                  {/* A button, so a past day can be opened and read — and fixed — the
+                      same way today is. The bar keeps its tone colour; only the cell
+                      around it gained a press and a selected state. */}
+                  <button
+                    type="button"
+                    onClick={() => select(d)}
+                    aria-pressed={selected === d}
+                    aria-label={
                       e
                         ? `${shortDayLabel(d)}: energy ${e.energy || "–"}, mood ${e.mood || "–"}, soreness ${e.soreness || "–"}`
                         : `${shortDayLabel(d)}: not logged`
                     }
-                    className="mt-1 block h-1.5 rounded-full"
-                    style={{
-                      background: e ? TONE_COLOR[dayTone(e)] : "var(--color-hairline-strong)",
-                      opacity: e ? 1 : 0.6,
-                    }}
-                  />
-                  {/* Today is the last cell at the right of the row, so it needs a
-                      word rather than relying on the position alone. */}
-                  {isToday ? (
-                    <span className="mt-0.5 block text-[8px] leading-none text-ink-3">today</span>
-                  ) : null}
+                    className={[
+                      "block w-full rounded-md px-0.5 py-1 text-center transition-colors",
+                      selected === d ? "bg-white/[0.10]" : "hover:bg-white/[0.06]",
+                    ].join(" ")}
+                  >
+                    <span
+                      className={`block text-[9px] ${
+                        isToday || selected === d ? "font-semibold text-ink" : "text-ink-3"
+                      }`}
+                    >
+                      {shortDayLabel(d).slice(0, 1)}
+                    </span>
+                    {/* One bar per day, coloured by how the day went overall rather
+                        than by a single scale. Grey when nothing was logged, which is
+                        the honest read of a day that has no answer rather than a bad
+                        one. */}
+                    <span
+                      className="mt-1 block h-1.5 rounded-full"
+                      style={{
+                        background: e ? TONE_COLOR[dayTone(e)] : "var(--color-hairline-strong)",
+                        opacity: e ? 1 : 0.6,
+                      }}
+                    />
+                    {/* Today is the last cell at the right of the row, so it needs a
+                        word rather than relying on the position alone. */}
+                    {isToday ? (
+                      <span className="mt-0.5 block text-[8px] leading-none text-ink-3">today</span>
+                    ) : null}
+                  </button>
                 </li>
               );
             })}
