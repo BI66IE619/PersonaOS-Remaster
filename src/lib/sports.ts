@@ -324,6 +324,7 @@ const ACTIVITY_TO_SPORT: [RegExp, string][] = [
   [/run/, "Running"],
   [/soccer|football/, "Soccer"],
   [/basketball/, "Basketball"],
+  [/baseball/, "Baseball"],
   [/tennis|pickleball/, "Tennis"],
   [/volley/, "Volleyball"],
   [/martial|karate|judo|taekwondo/, "Martial arts"],

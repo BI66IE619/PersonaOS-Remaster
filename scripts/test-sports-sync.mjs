@@ -23,6 +23,7 @@ check("indoor cycling is matched", sportForActivity("Indoor Cycling") === "Cycli
 check("swimming is matched", sportForActivity("Swimming") === "Swimming");
 check("open water swimming is matched", sportForActivity("Open Water Swimming") === "Swimming", String(sportForActivity("Open Water Swimming")));
 check("soccer is matched", sportForActivity("Soccer") === "Soccer");
+check("baseball is matched", sportForActivity("Baseball") === "Baseball");
 check("indoor running is matched", sportForActivity("Indoor Running") === "Running");
 check("stair climbing is not a sport", sportForActivity("Stair Climbing") === null);
 check("strength is not a sport", sportForActivity("Strength — Upper") === null);
@@ -131,7 +132,19 @@ restoreSession(manualToGo);
 check("the session is back", read().sessions.some((x) => x.id === manualToGo.id));
 check("with the same id, so a double undo cannot duplicate it", read().sessions.filter((x) => x.id === manualToGo.id).length === 1);
 check("and the log is back to where it was", read().sessions.length === countAfterDeletes + 1, `${read().sessions.length}`);
-check("every field survived the round trip", JSON.stringify(read().sessions.find((x) => x.id === manualToGo.id)) === JSON.stringify(manualToGo), JSON.stringify(read().sessions.find((x) => x.id === manualToGo.id)));
+const restored = read().sessions.find((x) => x.id === manualToGo.id);
+/* Every field but the clock. restoreSession deliberately moves updatedAt so the
+   restored row is strictly newer and re-pushes, which is what cancels the delete
+   already sent — so asserting the whole object byte-for-byte, clock included, is a
+   promise the undo cannot keep. Compare the fields, then assert the clock moved. */
+const { updatedAt: restoredAt, ...restoredFields } = restored;
+const { updatedAt: originalAt, ...originalFields } = manualToGo;
+check(
+  "every field survived the round trip",
+  JSON.stringify(restoredFields) === JSON.stringify(originalFields),
+  JSON.stringify(restoredFields),
+);
+check("and the clock moved so the restore re-pushes", restoredAt > originalAt, `${originalAt} -> ${restoredAt}`);
 
 /* THE REGRESSION THIS GUARDS: the delete left a tombstone so the watch would
    not re-offer the workout. Restoring the session has to take that tombstone out

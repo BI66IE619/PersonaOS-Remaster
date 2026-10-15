@@ -6,6 +6,7 @@ import { addSession } from "@/lib/sports";
 export const SPORTS = [
   "Soccer",
   "Basketball",
+  "Baseball",
   "Football",
   "Tennis",
   "Swimming",
