@@ -7,6 +7,7 @@ import { DayRollover } from "@/components/day-rollover";
 import { PageFade } from "@/components/page-fade";
 import { ColdStart } from "@/components/cold-start";
 import { NativeBackgroundSync } from "@/components/native-background-sync";
+import { FinanceAutoSync } from "@/components/finance-auto-sync";
 import { COLD_ENTRY_PROBE } from "@/lib/cold-entry";
 import "./globals.css";
 
@@ -118,6 +119,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           {/* Hands the session to the background worker so it keeps syncing while
               the app is closed. Does nothing on the web. */}
           <NativeBackgroundSync />
+          {/* Pulls finance from SimpleFIN on each app open, so the ledger is current
+              without the button. Rate-limited server-side. */}
+          <FinanceAutoSync />
           <DayRollover />
           {/* Here rather than in PageShell, because only this survives a
               navigation. Inside a page it was remounted every time, and a remount
