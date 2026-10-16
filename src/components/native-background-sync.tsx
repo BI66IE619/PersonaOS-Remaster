@@ -14,6 +14,8 @@ interface BackgroundSyncPlugin {
   }): Promise<void>;
   getSession(): Promise<{ accessToken?: string; refreshToken?: string }>;
   clearSession(): Promise<void>;
+  setIngestToken(options: { apiBase: string; token: string }): Promise<void>;
+  getIngestToken(): Promise<{ token?: string }>;
 }
 
 let plugin: BackgroundSyncPlugin | null = null;
@@ -29,11 +31,20 @@ function isNative(): boolean {
 }
 
 /**
- * Hands the signed-in session to the native background worker.
+ * Hands the phone's background worker what it needs, and keeps the WebView's login
+ * restorable.
  *
- * The background has no cookie jar, so the worker authenticates with a bearer token
- * it stores. This runs on every app open and after every auth change, because the
- * access token expires hourly and the worker needs a fresh one to start from.
+ * Two separate things, deliberately. The Supabase session is stored so the WebView
+ * can be restored when Android drops its cookies — the worker does not use it. What
+ * the worker uses is a token minted just for it at /api/health/token, stored apart
+ * from the login so the worker can never refresh, and rotate, the session the
+ * WebView holds. Sharing one rotating login between the two was what logged the
+ * phone out: whichever refreshed last killed the other's copy.
+ *
+ * The session push runs on every app open and after every auth change, because the
+ * access token expires hourly. The ingest token is minted once and only re-minted
+ * when it is missing (the worker drops it on a 401) or on a fresh sign-in, which may
+ * be a different account.
  *
  * Renders nothing. On the web it does nothing at all — there is no worker.
  */
@@ -48,7 +59,7 @@ export function NativeBackgroundSync() {
       try {
         const { data } = await supabase.auth.getSession();
         if (data.session) {
-          /* Signed in: keep the native copy current for the worker. */
+          /* Signed in: keep the native copy current for the restore below. */
           sessionStorage.removeItem(RESTORE_FLAG);
           await bg().setSession({
             supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
@@ -80,15 +91,40 @@ export function NativeBackgroundSync() {
       }
     };
 
+    /** Give the worker its own credential, unless it already has one. */
+    const mintIngest = async (force: boolean) => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (!data.session) return;
+        if (!force) {
+          const existing = await bg().getIngestToken().catch(() => null);
+          if (existing?.token) return;
+        }
+        const res = await fetch("/api/health/token", { method: "POST" });
+        if (!res.ok) return;
+        const body = (await res.json().catch(() => null)) as { token?: string } | null;
+        if (body?.token) {
+          await bg().setIngestToken({ apiBase: window.location.origin, token: body.token });
+        }
+      } catch {
+        /* The worker starts without a token this open; the next one mints one. */
+      }
+    };
+
     void push();
+    void mintIngest(false);
     const { data } = supabase.auth.onAuthStateChange((event) => {
       /* An explicit sign-out has to clear the native copy too, or the restore below
-         would sign the user straight back in on the next launch. */
+         would sign the user straight back in on the next launch. It also drops the
+         worker's token, since that credential belonged to the account signing out. */
       if (event === "SIGNED_OUT") {
         void bg().clearSession().catch(() => {});
         return;
       }
       void push();
+      /* A fresh sign-in may be a different account, whose worker token is not this
+         device's; mint a new one for whoever is now signed in. */
+      if (event === "SIGNED_IN") void mintIngest(true);
     });
     return () => data.subscription.unsubscribe();
   }, []);

@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { createHash } from "node:crypto";
 import { eq, and, isNull, isNotNull, gt, inArray, desc, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { getUserId } from "@/lib/supabase/server";
@@ -301,6 +302,37 @@ export async function hasHealthData(userId: string): Promise<boolean> {
     .where(eq(schema.healthDaily.userId, userId))
     .limit(1);
   return rows.length > 0;
+}
+
+/**
+ * The background worker's credential, kept apart from the login.
+ *
+ * SHA-256 of the token, hex. The database only ever holds this, so a leaked row
+ * cannot be turned back into a working token, and the phone is the only place the
+ * plaintext exists (in its own SharedPreferences). A fast hash is right here: the
+ * token is 32 random bytes, so there is no low-entropy guess to slow down, unlike
+ * a password.
+ */
+const ingestTokenHash = (token: string) =>
+  createHash("sha256").update(token).digest("hex");
+
+/** Store the hash of a freshly minted worker token, retiring any previous one. */
+export async function setIngestToken(userId: string, token: string): Promise<void> {
+  await db
+    .update(schema.profiles)
+    .set({ ingestTokenHash: ingestTokenHash(token) })
+    .where(eq(schema.profiles.id, userId));
+}
+
+/** The user a worker token belongs to, or null. A lookup by hash, never a reveal. */
+export async function getUserIdByIngestToken(token: string): Promise<string | null> {
+  if (!token) return null;
+  const rows = await db
+    .select({ id: schema.profiles.id })
+    .from(schema.profiles)
+    .where(eq(schema.profiles.ingestTokenHash, ingestTokenHash(token)))
+    .limit(1);
+  return rows[0]?.id ?? null;
 }
 
 /* Health Connect landings.

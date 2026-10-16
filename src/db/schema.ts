@@ -73,6 +73,17 @@ export const profiles = pgTable(
     timezone: text("timezone").notNull().default("UTC"),
     /** Whether the mentor may send anything at all. Off until asked. */
     mentorEnabled: boolean("mentor_enabled").notNull().default(false),
+    /**
+     * The background worker's own credential, kept apart from the login.
+     *
+     * A long-lived random string the phone's sync job presents as a bearer to
+     * /api/health/ingest. It exists so the worker never refreshes the Supabase
+     * session: two things refreshing one rotating login is what logged the phone
+     * out, because whichever rotated last invalidated the other's copy, the WebView
+     * then failed and signed out. Stored as a SHA-256 hash, so this row never holds
+     * the token itself. Null until a phone asks for one.
+     */
+    ingestTokenHash: text("ingest_token_hash"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     ...stamped,
   },

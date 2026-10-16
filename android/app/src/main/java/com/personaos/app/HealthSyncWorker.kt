@@ -12,16 +12,22 @@ import java.time.LocalDate
 /**
  * The background sync.
  *
- * Reads both sources and posts them to /api/health/ingest with a bearer token, so
- * the app stays current while it is closed — the point being that you can be on a
- * computer, with the phone in a pocket, and still see the day.
+ * Reads both sources and posts them to /api/health/ingest, so the app stays current
+ * while it is closed — the point being that you can be on a computer, with the phone
+ * in a pocket, and still see the day.
  *
- * It refreshes the access token first rather than trusting the one handed over on
- * app open, which is an hour old at best. WorkManager gives no guarantee of when
- * this runs, so "assume fresh" is not available.
+ * It posts with its own long-lived ingest token, NOT the Supabase session. That is
+ * the fix for the phone being logged out: the worker used to authenticate by
+ * refreshing the session, which meant the phone had two things refreshing one
+ * rotating login — the WebView while the app was open and the worker while it was
+ * closed. Whichever refreshed last invalidated the other, the WebView then failed
+ * and signed out, and the worker lost its credential too. The ingest token is
+ * neither the login nor rotating, so the worker cannot touch the session at all.
  *
- * Failures return retry, not success, so a phone that was offline or a token refresh
- * that hit a blip is tried again at the next window rather than silently skipped.
+ * Failures return retry, not success, so a phone that was offline or hit a server
+ * blip is tried again at the next window rather than silently skipped. A rejected
+ * token is the exception: it is dropped, not retried, so the next app open mints a
+ * new one instead of the worker spinning on a credential that will never work.
  */
 class HealthSyncWorker(
     context: Context,
@@ -29,13 +35,7 @@ class HealthSyncWorker(
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
-        val stored = SessionStore.load(applicationContext) ?: return Result.success()
-        val session = refresh(stored)
-        if (session == null) {
-            /* No usable login. Not a retry: nothing changes until the app is opened
-               and a fresh session is handed down. */
-            return Result.success()
-        }
+        val ingest = SessionStore.loadIngest(applicationContext) ?: return Result.success()
 
         val to = LocalDate.now().toString()
         val from = LocalDate.now().minusDays(29).toString()
@@ -65,10 +65,15 @@ class HealthSyncWorker(
             .put("daily", daily)
             .put("sessions", sessions)
 
-        return if (post("${session.apiBase}/api/health/ingest", session.accessToken, body.toString())) {
-            Result.success()
-        } else {
-            Result.retry()
+        return when (post("${ingest.apiBase}/api/health/ingest", ingest.token, body.toString())) {
+            in 200..299 -> Result.success()
+            401, 403 -> {
+                /* Retired or revoked. Drop it so the next app open mints another,
+                   rather than the worker retrying a token that will never work. */
+                SessionStore.clearIngest(applicationContext)
+                Result.success()
+            }
+            else -> Result.retry()
         }
     }
 
@@ -77,34 +82,8 @@ class HealthSyncWorker(
         for (i in 0 until source.length()) target.put(source.get(i))
     }
 
-    /** Exchanges the refresh token for a fresh access token. */
-    private fun refresh(session: SessionStore.Session): SessionStore.Session? {
-        return try {
-            val url = URL("${session.supabaseUrl}/auth/v1/token?grant_type=refresh_token")
-            val conn = url.openConnection() as HttpURLConnection
-            conn.requestMethod = "POST"
-            conn.setRequestProperty("apikey", session.anonKey)
-            conn.setRequestProperty("Content-Type", "application/json")
-            conn.connectTimeout = 15_000
-            conn.readTimeout = 15_000
-            conn.doOutput = true
-            conn.outputStream.use {
-                it.write(JSONObject().put("refresh_token", session.refreshToken).toString().toByteArray())
-            }
-            if (conn.responseCode !in 200..299) return null
-            val text = conn.inputStream.bufferedReader().use { it.readText() }
-            val obj = JSONObject(text)
-            val access = obj.getString("access_token")
-            val refresh = obj.optString("refresh_token", session.refreshToken)
-            val updated = session.copy(accessToken = access, refreshToken = refresh)
-            SessionStore.save(applicationContext, updated)
-            updated
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    private fun post(urlString: String, token: String, body: String): Boolean {
+    /** The response code, or 0 when the request could not be made at all. */
+    private fun post(urlString: String, token: String, body: String): Int {
         return try {
             val conn = URL(urlString).openConnection() as HttpURLConnection
             conn.requestMethod = "POST"
@@ -116,9 +95,9 @@ class HealthSyncWorker(
             conn.outputStream.use { it.write(body.toByteArray()) }
             val code = conn.responseCode
             conn.disconnect()
-            code in 200..299
+            code
         } catch (_: Exception) {
-            false
+            0
         }
     }
 }

@@ -51,4 +51,33 @@ object SessionStore {
     fun clear(context: Context) {
         prefs(context).edit().clear().apply()
     }
+
+    /**
+     * The worker's own credential, stored apart from the login.
+     *
+     * This is the whole point of the split: the worker posts with a token that is
+     * not the Supabase session, so it never refreshes — and therefore never
+     * rotates — the login the WebView is also using. Before this, whichever of the
+     * two refreshed last invalidated the other, and the phone was logged out.
+     */
+    data class Ingest(val apiBase: String, val token: String)
+
+    fun saveIngest(context: Context, apiBase: String, token: String) {
+        prefs(context).edit()
+            .putString("ingestApiBase", apiBase)
+            .putString("ingestToken", token)
+            .apply()
+    }
+
+    fun loadIngest(context: Context): Ingest? {
+        val p = prefs(context)
+        val api = p.getString("ingestApiBase", null) ?: return null
+        val token = p.getString("ingestToken", null) ?: return null
+        return Ingest(api, token)
+    }
+
+    /** Drop just the worker credential, e.g. when the server rejects it. */
+    fun clearIngest(context: Context) {
+        prefs(context).edit().remove("ingestApiBase").remove("ingestToken").apply()
+    }
 }

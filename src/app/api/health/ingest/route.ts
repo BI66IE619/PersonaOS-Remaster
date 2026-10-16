@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   ensureProfile,
+  getUserIdByIngestToken,
   upsertHealthDaily,
   upsertHealthSessions,
 } from "@/lib/dal";
@@ -9,17 +10,17 @@ import { getUserId, getUserIdFromBearer } from "@/lib/supabase/server";
 export const dynamic = "force-dynamic";
 
 /**
- * Who is posting this, from whichever of the two sessions the caller has.
+ * Who is posting this, from whichever credential the caller holds.
  *
- * The browser arrives with a Supabase session cookie; the Health Connect phone
- * app arrives with a bearer token, because a native app has no cookie jar to
- * keep in sync and should not have to grow one just to satisfy a server that was
- * written for a browser first. Both are verified against Supabase rather than
- * decoded, so neither is a claim the caller is trusted on.
+ * Three callers, three credentials. The browser arrives with a Supabase session
+ * cookie. A foreground phone sync arrives with the Supabase access token as a
+ * bearer, verified against the Auth server. The background worker arrives with its
+ * own long-lived ingest token — a hash lookup, not a Supabase call — which exists
+ * precisely so the worker never has to touch, and rotate, the login.
  *
- * The cookie is tried first because it is free. The token path costs a round
- * trip to the Auth server, which is worth avoiding for the browser case where a
- * perfectly good session is already sitting in the request.
+ * The cookie is tried first because it is free. A JWT bearer costs a round trip to
+ * the Auth server, so it is only attempted for something shaped like a JWT; the
+ * worker's opaque token skips straight to the lookup.
  */
 async function callerUserId(request: Request): Promise<string | null> {
   try {
@@ -29,7 +30,23 @@ async function callerUserId(request: Request): Promise<string | null> {
     /* getUserId swallows its own failures and returns null, but a broken cookie
        store should not stop the token path from being tried. */
   }
-  return getUserIdFromBearer(request);
+
+  const header = request.headers.get("authorization");
+  const token =
+    header && header.toLowerCase().startsWith("bearer ")
+      ? header.slice("bearer ".length).trim()
+      : "";
+  if (!token) return null;
+
+  /* A Supabase access token is a JWT — three dot-separated parts. The worker's
+     credential is an opaque random string, so a missing pair of dots means it is
+     not worth asking the Auth server about. */
+  if (token.split(".").length === 3) {
+    const viaSupabase = await getUserIdFromBearer(request);
+    if (viaSupabase) return viaSupabase;
+    return null;
+  }
+  return getUserIdByIngestToken(token);
 }
 
 /**

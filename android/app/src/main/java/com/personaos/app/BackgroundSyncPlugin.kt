@@ -36,6 +36,28 @@ class BackgroundSyncPlugin : Plugin() {
     }
 
     /**
+     * The worker's own credential, handed down by the WebView after it mints one.
+     *
+     * Stored apart from the Supabase session on purpose: this is what lets the
+     * worker post without ever refreshing — and rotating — the login the WebView
+     * holds. Scheduling lives here too, because this token is what makes a run
+     * possible.
+     */
+    @PluginMethod
+    fun setIngestToken(call: PluginCall) {
+        val apiBase = call.getString("apiBase")
+        val token = call.getString("token")
+        if (apiBase == null || token == null) {
+            call.reject("Missing ingest token fields.")
+            return
+        }
+        SessionStore.saveIngest(context, apiBase, token)
+        HealthSyncScheduler.schedule(context)
+        HealthSyncScheduler.kickOnce(context)
+        call.resolve()
+    }
+
+    /**
      * The stored session, so the WebView can restore a login the OS did not keep.
      *
      * Android's WebView does not reliably persist the Supabase cookies across a full
