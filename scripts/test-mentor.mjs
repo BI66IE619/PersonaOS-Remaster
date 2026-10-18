@@ -447,6 +447,8 @@ for (const [n, needle] of [
     "Never suggest anything predatory",
   ],
   ["a money question is not deflected to a parent", "must not deflect a spending or saving question"],
+  ["being told the age does not trigger a parent hand-off", "do not pivot to a parent"],
+  ["age is not a restriction on what it will discuss", "Their age is not a restriction"],
 ]) {
   check(`rule: ${n}`, rules.includes(needle));
 }
