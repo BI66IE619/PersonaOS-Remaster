@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import Script from "next/script";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AmbientParticles } from "@/components/ambient-particles";
 import { AppNav } from "@/components/app-nav";
@@ -52,13 +51,10 @@ export const viewport: Viewport = {
  *
  * The trade is that the target cannot be found from here, because the nav has
  * not been parsed. So the question the script asks is not "is there a brand to
- * fly to" but "is this a launch that is entitled to one" — sessionStorage, the
- * motion preference, and the width at which the desktop nav exists. All three are
- * known before the body exists, and all three are what the decision actually
- * turns on. 640px is the same `sm` the nav is written in, so on a phone this
- * declines without measuring anything and the panels are never hidden at all;
- * on a desktop it proceeds. The brand is still checked for real, in ColdStart,
- * before anything flies.
+ * fly to" but "is this a launch that is entitled to one" — the entry flag and the
+ * motion preference. Both are known before the body exists, and both are what the
+ * decision actually turns on. The brand, and which of the two endings to play, is
+ * checked for real in ColdStart.
  *
  * The removal is armed in the same breath as the hiding, and that is the point.
  * Everything visible about the cold start is undone by dropping one attribute,
@@ -88,23 +84,18 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       suppressHydrationWarning
         className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
       >
-        <head />
+        <head>
+          {/* Must be parsed before the body, so data-intro is on <html> before any
+              panel exists and the hold is in place on the very first paint. This is
+              a plain inline script on purpose: next/script's beforeInteractive was
+              not actually pre-paint on the phone — the dashboard painted, then the
+              hold hid it, then the intro played, which is the exact flash the hold
+              exists to prevent. On the server the tag is emitted where it is; no
+              client-side navigation needs it to re-run, because a cold entry always
+              arrives as a fresh document (the splash uses location.replace). */}
+          <script dangerouslySetInnerHTML={{ __html: COLD_START }} />
+        </head>
         <body className="flex min-h-full flex-col">
-          {/* See COLD_START for what this decides and why it has to happen before
-              the first paint.
-
-              next/script rather than a raw <script> tag, and this was a real bug
-              rather than a warning to silence: React never executes a script tag that
-              a component rendered, so the probe worked on the server-rendered HTML
-              and did nothing on any client-side navigation — meaning an in-app return
-              to Home played the intro without ever having held the letters back.
-
-              In the body rather than the head because that is where next/script
-              belongs; with `beforeInteractive` Next injects it before hydration, which
-              is what the attribute on <html> needs. */}
-          <Script id="cold-entry-probe" strategy="beforeInteractive">
-            {COLD_START}
-          </Script>
           <AmbientParticles />
           <AppNav />
           {/* A sibling of the page, never a wrapper around it, and that is a
