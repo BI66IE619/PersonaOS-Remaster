@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "framer-motion";
 import { BrandMorph } from "@/components/brand-morph";
+import { MobileIntro } from "@/components/mobile-intro";
 import { Mark } from "@/components/splash-mark";
 import { takeColdEntry } from "@/lib/cold-entry";
 
@@ -53,7 +54,7 @@ import { takeColdEntry } from "@/lib/cold-entry";
  * brand is app chrome, and this mounts once with the layout that owns the corner
  * the P is flying to.
  */
-type Stage = "prepaint" | "flight" | "idle";
+type Stage = "prepaint" | "flight" | "mobile" | "idle";
 
 export function ColdStart() {
   const reduced = useReducedMotion();
@@ -89,13 +90,17 @@ export function ColdStart() {
        released. The flag is still spent either way, because a launch that will
        not be rewarded should not leave a claim behind for a later one. */
     if (!verdict.current || reduced) return decline();
-    /* The mobile bar is icons with no wordmark, so there is no corner to send
-       the P to. The element is still in the document there, merely collapsed to
-       nothing, so this asks whether it has width rather than whether it exists —
-       a presence test would find a target nobody can see, hold the panels for a
-       flight with nowhere to land, and leave the reader with an empty page. The
-       head script declines below the same width without measuring, so this is
-       normally a belt-and-braces check rather than the one that does the work. */
+    /* The phone layout, told apart by width rather than by a missing mark. A desktop
+       page without a nav — the landing card — has no brand either, and that case
+       should release the hold, not play a phone intro in a desktop window. Below the
+       same 640px breakpoint the phone bar is the one on screen, so the letter gets
+       the phone ending. The pre-paint script now holds the panels at both widths, so
+       this is the branch that decides rather than a belt-and-braces check. */
+    const phone = window.matchMedia("(max-width: 639px)").matches;
+    if (phone) {
+      const mobile = requestAnimationFrame(() => setStage("mobile"));
+      return () => cancelAnimationFrame(mobile);
+    }
     const mark = document.querySelector<HTMLElement>("[data-nav-brand] [data-brand-p]");
     if (!mark || mark.getBoundingClientRect().width === 0) return decline();
     /* One frame, so the frame the script held back is painted before the flight
@@ -162,6 +167,7 @@ export function ColdStart() {
   useEffect(() => () => cleanup.current?.(), []);
 
   if (stage === "flight") return <BrandMorph onDone={land} />;
+  if (stage === "mobile") return <MobileIntro onDone={land} />;
   if (stage === "idle") return null;
 
   /* The letter, standing where the title card left it. Server-rendered, and held

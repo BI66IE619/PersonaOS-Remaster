@@ -162,13 +162,15 @@ export function coldEntryCookieParts(now: number = Date.now()) {
    them inside a template literal, and anything fancier than ES5 is a liability in
    a script whose only job is to not throw before the page has a chance to paint.
 
-   The reduced-motion and viewport checks are here rather than in the layout
-   because the layout's copy of them was a second place holding the same rule. The
-   gates are not decoration: below 640px the mark is not positioned where the
-   animation starts it, so playing would move it from nowhere to somewhere. */
+   The reduced-motion check is here rather than in the layout because the layout's
+   copy of it was a second place holding the same rule. It is not decoration: the
+   global stylesheet can collapse a CSS animation, but the panel hold this
+   authorises is a transition, and a reader who asked for less motion must not be
+   given a staged reveal anyway. The viewport gate that used to sit beside it is
+   gone — the phone now has its own ending (see ColdStart), so the hold is what both
+   layouts want. */
 const PROBE_SRC = `(function(){` +
   `if(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches)return false;` +
-  `if(window.matchMedia&&!window.matchMedia('(min-width: 640px)').matches)return false;` +
   `var KEY='${KEY}';var COOKIE='${COOKIE}';var MAX_AGE=${MAX_AGE_MS};` +
   `try{var s=sessionStorage.getItem(KEY);if(s!==null){var v=Number(s);if(Number.isFinite(v)&&Date.now()-v<=MAX_AGE)return true}}catch(e){}` +
   `try{var m=document.cookie.match(new RegExp('(?:^|; )'+COOKIE+'=([^;]*)'));if(m){var at=Number(decodeURIComponent(m[1]));if(Number.isFinite(at)&&Date.now()-at<=MAX_AGE)return true}}catch(e){}` +
