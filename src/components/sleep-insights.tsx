@@ -77,7 +77,12 @@ export function SleepInsights({ series }: { series: SleepPoint[] }) {
         </div>
       ) : null}
 
-      <div className="mt-auto space-y-3">
+      {/* No mt-auto: the panel still stretches to match its neighbour, but the
+          readings now follow the trend instead of being pinned to the bottom. With
+          mt-auto, every extra pixel the check-in box gained became a gap between
+          the line and these two tiles, which read as the panel coming apart. Any
+          spare height now sits below the content, where it reads as padding. */}
+      <div className="space-y-3">
         <Read
           title="Sleep debt"
           body={debt.verdict}
