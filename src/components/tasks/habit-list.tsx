@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { addHabit, removeHabit, renameHabit, toggleHabit } from "@/lib/habits";
+import { addHabit, removeHabit, renameHabit, setHabitSchedule, toggleHabit } from "@/lib/habits";
 import { bestStreak, currentStreak } from "@/lib/streaks";
 import { addDays } from "@/lib/dates";
+import { EVERY_DAY, WEEKDAYS, isScheduled, scheduleLabel } from "@/lib/habit-schedule";
 import { EmptyState } from "@/components/empty-state";
 import type { Habit } from "@/lib/types-habits";
 import { solid } from "@/lib/theme";
@@ -54,6 +55,53 @@ function Pencil() {
   );
 }
 
+/** Seven toggles, Monday first. Shared by the add form and the inline editor so
+ *  the two cannot disagree about what a selected day looks like. */
+function DayPicker({
+  value,
+  onChange,
+  small = false,
+}: {
+  value: readonly number[];
+  onChange: (next: number[]) => void;
+  small?: boolean;
+}) {
+  const toggle = (day: number) => {
+    const next = value.includes(day)
+      ? value.filter((d) => d !== day)
+      : [...value, day].sort((a, b) => a - b);
+    /* Zero selected days would mean a habit that is never due. Treat that as
+       "every day" rather than storing something nobody can satisfy. */
+    onChange(next.length ? next : EVERY_DAY);
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Days of the week">
+      {WEEKDAYS.map((d) => {
+        const on = value.includes(d.value);
+        return (
+          <button
+            key={d.value}
+            type="button"
+            aria-pressed={on}
+            aria-label={d.label}
+            title={d.label}
+            onClick={() => toggle(d.value)}
+            className={[
+              "num grid place-items-center rounded-full border transition-colors",
+              small ? "h-5 w-5 text-[9px]" : "h-6 w-6 text-[10px]",
+              on
+                ? "border-[var(--color-accent-dim)] bg-white/[0.10] text-ink"
+                : "border-hairline text-ink-3 hover:text-ink-2",
+            ].join(" ")}
+          >
+            {d.short}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function HabitRow({
   habit,
   today,
@@ -64,19 +112,23 @@ function HabitRow({
   onAskDelete: (habit: Habit) => void;
 }) {
   const done = new Set(habit.days);
-  const streak = currentStreak(habit.days, today);
-  const best = bestStreak(habit.days);
+  const scheduledToday = isScheduled(today, habit.schedule);
+  const streak = currentStreak(habit.days, today, habit.schedule);
+  const best = bestStreak(habit.days, habit.schedule);
   const doneToday = done.has(today);
+  const everyDay = habit.schedule.length === 0 || habit.schedule.length === 7;
 
-  /* Renaming edits in place rather than routing through the delete dialog: the
-     whole point is that the history stays put, so there is nothing to warn about
-     and nothing to lose. Enter and blur commit; Escape backs out, and the skip
-     flag keeps the blur that follows the unmount from committing the abandoned
-     edit. */
+  /* Name and schedule are edited together, because those are the two things a
+     habit is. It stays in place rather than routing through the delete dialog: the
+     point of both edits is that the history does not move. Save and Escape are
+     explicit so a day toggle, which takes focus, cannot be mistaken for leaving
+     the field and commit the half-finished edit. */
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(habit.name);
+  const [draftDays, setDraftDays] = useState<number[]>(
+    habit.schedule.length ? habit.schedule : EVERY_DAY,
+  );
   const field = useRef<HTMLInputElement>(null);
-  const skipBlur = useRef(false);
 
   useEffect(() => {
     if (!editing) return;
@@ -87,22 +139,27 @@ function HabitRow({
 
   const startEdit = () => {
     setDraft(habit.name);
+    setDraftDays(habit.schedule.length ? habit.schedule : EVERY_DAY);
     setEditing(true);
   };
 
   const commit = () => {
-    if (skipBlur.current) {
-      skipBlur.current = false;
-      return;
-    }
     const value = draft.trim();
     if (value && value !== habit.name) renameHabit(habit.id, value);
+
+    const nextDays = draftDays.length ? draftDays : EVERY_DAY;
+    const before = [...(habit.schedule.length ? habit.schedule : EVERY_DAY)]
+      .sort((a, b) => a - b)
+      .join(",");
+    const after = [...nextDays].sort((a, b) => a - b).join(",");
+    if (after !== before) setHabitSchedule(habit.id, nextDays);
+
     setEditing(false);
   };
 
   const cancel = () => {
-    skipBlur.current = true;
     setDraft(habit.name);
+    setDraftDays(habit.schedule.length ? habit.schedule : EVERY_DAY);
     setEditing(false);
   };
 
@@ -112,13 +169,21 @@ function HabitRow({
         type="button"
         role="checkbox"
         aria-checked={doneToday}
-        aria-label={`${doneToday ? "Undo" : "Complete"} "${habit.name}" for today`}
+        aria-label={
+          scheduledToday
+            ? `${doneToday ? "Undo" : "Complete"} "${habit.name}" for today`
+            : `${habit.name} is not scheduled today`
+        }
         onClick={() => toggleHabit(habit.id, today)}
+        disabled={!scheduledToday}
+        title={scheduledToday ? undefined : "Rest day"}
         className={[
           "grid h-7 w-7 shrink-0 place-items-center rounded-full border transition-colors",
-          doneToday
-            ? "border-transparent bg-ink"
-            : "border-hairline-strong hover:border-[var(--color-accent-dim)] hover:bg-white/[0.07]",
+          !scheduledToday
+            ? "cursor-default border-hairline opacity-40"
+            : doneToday
+              ? "border-transparent bg-ink"
+              : "border-hairline-strong hover:border-[var(--color-accent-dim)] hover:bg-white/[0.07]",
         ].join(" ")}
       >
         {doneToday ? <Tick /> : null}
@@ -126,32 +191,53 @@ function HabitRow({
 
       <div className="min-w-0 flex-1">
         {editing ? (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              commit();
-            }}
-          >
-            <input
-              ref={field}
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onBlur={commit}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") {
-                  e.preventDefault();
-                  cancel();
-                }
+          <div>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                commit();
               }}
-              aria-label="Habit name"
-              maxLength={60}
-              className="w-full border-b border-hairline-strong bg-transparent pb-0.5 text-[13px] text-ink outline-none focus:border-[var(--color-accent)]"
-            />
-          </form>
+            >
+              <input
+                ref={field}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    cancel();
+                  }
+                }}
+                aria-label="Habit name"
+                maxLength={60}
+                className="w-full border-b border-hairline-strong bg-transparent pb-0.5 text-[13px] text-ink outline-none focus:border-[var(--color-accent)]"
+              />
+            </form>
+            <div className="mt-1.5 flex flex-wrap items-center gap-2">
+              <DayPicker value={draftDays} onChange={setDraftDays} small />
+              <button
+                type="button"
+                onClick={commit}
+                className="rounded border border-hairline px-1.5 py-0.5 text-[10px] text-ink-2 transition-colors hover:border-[var(--color-accent)]"
+              >
+                Save
+              </button>
+              <button
+                type="button"
+                onClick={cancel}
+                className="text-[10px] text-ink-3 transition-colors hover:text-ink-2"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         ) : (
           <p className="truncate text-[13px] text-ink-2">{habit.name}</p>
         )}
-        <p className="num mt-0.5 text-[10px] text-ink-3">{streakLabel(streak)}</p>
+        <p className="num mt-0.5 text-[10px] text-ink-3">
+          {scheduledToday ? streakLabel(streak) : "rest day"}
+          {everyDay ? "" : ` · ${scheduleLabel(habit.schedule)}`}
+        </p>
       </div>
 
       <div className="hidden items-center gap-1 sm:flex" aria-hidden>
@@ -231,8 +317,8 @@ function ConfirmDeleteHabit({
 }) {
   const keep = useRef<HTMLButtonElement>(null);
   const done = habit.days.length;
-  const streak = currentStreak(habit.days, today);
-  const best = bestStreak(habit.days);
+  const streak = currentStreak(habit.days, today, habit.schedule);
+  const best = bestStreak(habit.days, habit.schedule);
 
   /* Built as a list and joined, so no combination of streak and best can repeat
      or drop a part of the sentence. */
@@ -299,6 +385,7 @@ function ConfirmDeleteHabit({
 
 export function HabitList({ habits, today }: { habits: Habit[]; today: string }) {
   const [name, setName] = useState("");
+  const [days, setDays] = useState<number[]>(EVERY_DAY);
   const [asking, setAsking] = useState<Habit | null>(null);
   const field = useRef<HTMLInputElement>(null);
 
@@ -314,7 +401,7 @@ export function HabitList({ habits, today }: { habits: Habit[]; today: string })
     e.preventDefault();
     const value = name.trim();
     if (!value) return;
-    addHabit(value);
+    addHabit(value, days);
     setName("");
   };
 
@@ -343,22 +430,28 @@ export function HabitList({ habits, today }: { habits: Habit[]; today: string })
         />
       )}
 
-      <form onSubmit={submit} className="mt-4 flex items-center gap-2 border-t border-hairline pt-4">
-        <input
-          ref={field}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Add a habit"
-          aria-label="New habit name"
-          className="min-w-0 flex-1 bg-transparent text-[13px] text-ink-2 outline-none placeholder:text-ink-3"
-        />
-        <button
-          type="submit"
-          disabled={!name.trim()}
-          className="rounded-lg border border-hairline px-3 py-1.5 text-[11px] text-ink-2 transition-colors enabled:hover:bg-white/[0.07] enabled:hover:text-ink disabled:opacity-30"
-        >
-          Add
-        </button>
+      <form onSubmit={submit} className="mt-4 space-y-2 border-t border-hairline pt-4">
+        <div className="flex items-center gap-2">
+          <input
+            ref={field}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Add a habit"
+            aria-label="New habit name"
+            className="min-w-0 flex-1 bg-transparent text-[13px] text-ink-2 outline-none placeholder:text-ink-3"
+          />
+          <button
+            type="submit"
+            disabled={!name.trim()}
+            className="rounded-lg border border-hairline px-3 py-1.5 text-[11px] text-ink-2 transition-colors enabled:hover:bg-white/[0.07] enabled:hover:text-ink disabled:opacity-30"
+          >
+            Add
+          </button>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-[10px] text-ink-3">Days it happens</span>
+          <DayPicker value={days} onChange={setDays} />
+        </div>
       </form>
 
       {asking ? (

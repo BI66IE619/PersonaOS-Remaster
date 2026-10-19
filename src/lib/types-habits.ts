@@ -2,6 +2,10 @@ export type Habit = {
   id: string;
   name: string;
   createdAt: string;
+  /** ISO weekdays this habit is due: 1 = Monday … 7 = Sunday. Empty means every
+   *  day, which is what every habit saved before schedules existed becomes. The
+   *  streak counts due days, so a weekday habit is not broken by the weekend. */
+  schedule: number[];
   /** Day keys on which the habit was done. */
   days: string[];
   /** The device's clock the last time this habit changed: renamed, a day toggled.

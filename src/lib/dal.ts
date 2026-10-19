@@ -1372,6 +1372,7 @@ export async function upsertPlanTasks(userId: string, pushed: PushedPlanTask[]) 
 type PushedHabit = {
   clientId: string;
   name: string;
+  schedule: number[];
   days: string[];
   position: number;
   updatedAt: string | number | Date;
@@ -1399,6 +1400,7 @@ export async function upsertPlanHabits(userId: string, pushed: PushedHabit[]) {
   const rows = pushed.map((h) => ({
     clientId: h.clientId,
     name: h.name,
+    schedule: h.schedule,
     position: h.position,
     updatedAt: asDate(h.updatedAt),
   }));
@@ -1415,6 +1417,7 @@ export async function upsertPlanHabits(userId: string, pushed: PushedHabit[]) {
         target: [schema.habits.userId, schema.habits.clientId],
         set: {
           name: sql`excluded.name`,
+          schedule: sql`excluded.schedule`,
           position: sql`excluded.position`,
           updatedAt: sql`excluded.updated_at`,
           deletedAt: null,

@@ -30,9 +30,11 @@ import {
   mergeRemote as mergeHabits,
   removeHabitPure,
   renameHabitPure,
+  setHabitSchedulePure,
   revive as reviveHabits,
   toggleHabitPure,
 } from "../src/lib/habits.ts";
+import { currentStreak, bestStreak } from "../src/lib/streaks.ts";
 
 let failures = 0;
 function check(name, condition, detail = "") {
@@ -377,6 +379,48 @@ console.log("\nplan sync: the merge, the payloads, the tombstones\n");
   );
   check("a blank rename is ignored", renameHabitPure(tracked, id, "   ") === tracked);
   check("and an unknown id is ignored", renameHabitPure(tracked, "nope", "X") === tracked);
+}
+
+/* ---- 12c. habit schedules, and what a streak means under one ---- */
+{
+  const everyday = addHabitPure(EMPTY_HABITS, "Read");
+  check("a habit defaults to every day", everyday.habits[0].schedule.length === 7);
+  check(
+    "and the payload carries the schedule",
+    JSON.stringify(habitPayload(everyday.habits[0], 0).schedule) ===
+      JSON.stringify(everyday.habits[0].schedule),
+  );
+
+  const weekdays = addHabitPure(EMPTY_HABITS, "Gym", [1, 3, 5]);
+  const id = weekdays.habits[0].id;
+  const tracked = toggleHabitPure(weekdays, id, DAY);
+  const moved = setHabitSchedulePure(tracked, id, [2, 4, 5, 5]);
+  check("a schedule is kept and deduped", JSON.stringify(moved.habits[0].schedule) === JSON.stringify([2, 4, 5]));
+  check("a schedule change keeps the days", moved.habits[0].days.includes(DAY));
+  check(
+    "and moves the clock so it travels",
+    moved.habits[0].updatedAt > tracked.habits[0].updatedAt,
+  );
+  check(
+    "an old record with no schedule reads as every day",
+    reviveHabits({ habits: [{ id: "x", name: "Old", days: [] }] }).habits[0].schedule.length === 0,
+  );
+
+  /* 2026-10-05 is a Monday, so the weekend is 10-10 and 10-11. A weekday habit is
+     not broken by them. */
+  const week = ["2026-10-05", "2026-10-06", "2026-10-07", "2026-10-08", "2026-10-09"];
+  const workdays = [1, 2, 3, 4, 5];
+  check(
+    "a weekday streak survives the weekend",
+    currentStreak(week, "2026-10-10", workdays) === 5,
+    `${currentStreak(week, "2026-10-10", workdays)}`,
+  );
+  check("and its best is the same five", bestStreak(week, workdays) === 5);
+  check(
+    "a missed scheduled day still breaks it",
+    currentStreak(week.filter((d) => d !== "2026-10-06"), "2026-10-10", workdays) === 3,
+    `${currentStreak(week.filter((d) => d !== "2026-10-06"), "2026-10-10", workdays)}`,
+  );
 }
 
 /* ---- 13. a deleted habit takes its grid with it ---- */

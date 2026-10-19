@@ -116,7 +116,7 @@ async function habitGrids() {
   for (const d of days) {
     byHabit.set(d.habitClientId, [...(byHabit.get(d.habitClientId) ?? []), d.day]);
   }
-  return rows.map((h) => ({ clientId: h.clientId, name: h.name, days: byHabit.get(h.clientId) ?? [] }));
+  return rows.map((h) => ({ clientId: h.clientId, name: h.name, schedule: h.schedule, days: byHabit.get(h.clientId) ?? [] }));
 }
 
 try {
@@ -222,7 +222,7 @@ try {
   check("and device one sees it done", backOnOne.tasks.find((t) => t.id === ticked.tasks[0].id)?.done === true);
 
   /* ---- 4. a habit and its grid ---- */
-  let oneHabits = habits.addHabitPure(EMPTY_HABITS, "Read");
+  let oneHabits = habits.addHabitPure(EMPTY_HABITS, "Read", [1, 2, 3, 4, 5]);
   const read = oneHabits.habits[0].id;
   oneHabits = habits.toggleHabitPure(oneHabits, read, DAY);
   oneHabits = habits.toggleHabitPure(oneHabits, read, "2026-04-11");
@@ -231,16 +231,26 @@ try {
   check("the habit came back", (await habitGrids()).length === 1);
   let grid = await habitGrids();
   check("with both days", grid[0]?.days.length === 2, `${grid[0]?.days.length} days`);
+  check(
+    "and its weekday schedule",
+    JSON.stringify(grid[0]?.schedule) === JSON.stringify([1, 2, 3, 4, 5]),
+    JSON.stringify(grid[0]?.schedule),
+  );
   check("including the one just toggled", grid[0]?.days.includes(DAY));
 
   /* A second device rebuilds the grid from the habit and its days together, which is
      what the route's fold is for. */
   const twoHabits = habits.mergeRemote(EMPTY_HABITS, {
-    habits: (await habitGrids()).map((h) => ({ clientId: h.clientId, name: h.name, days: h.days, updatedAt: LATER })),
+    habits: (await habitGrids()).map((h) => ({ clientId: h.clientId, name: h.name, schedule: h.schedule, days: h.days, updatedAt: LATER })),
     deleted: [],
   });
   check("a second device reconstructs the habit", twoHabits.habits.length === 1);
   check("with both days", twoHabits.habits[0]?.days.length === 2, `${twoHabits.habits[0]?.days.length}`);
+  check(
+    "and its schedule",
+    JSON.stringify(twoHabits.habits[0]?.schedule) === JSON.stringify([1, 2, 3, 4, 5]),
+    JSON.stringify(twoHabits.habits[0]?.schedule),
+  );
 
   /* Un-toggling a day on another device replaces the grid rather than adding to it.
      This is the whole-state rule, and it is the case that is easy to get wrong: a
@@ -274,7 +284,7 @@ try {
 
   /* A newer one wins, both row and grid. */
   await dal.upsertPlanHabits(TEST_USER, [
-    { clientId: read, name: "Read daily", days: ["2026-04-10"], position: 0, updatedAt: MUCH_LATER },
+    { clientId: read, name: "Read daily", schedule: [1, 2, 3, 4, 5], days: ["2026-04-10"], position: 0, updatedAt: MUCH_LATER },
   ]);
   grid = await habitGrids();
   check("a newer habit push wins the row", grid[0]?.name === "Read daily", `${grid[0]?.name}`);

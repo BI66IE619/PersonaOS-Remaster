@@ -13,6 +13,7 @@ import {
 import { getServerSnapshot, getSnapshot, subscribe, toggleHabit } from "@/lib/habits";
 import { EmptyState } from "@/components/empty-state";
 import { currentStreak } from "@/lib/streaks";
+import { isScheduled } from "@/lib/habit-schedule";
 import type { Habit } from "@/lib/types-habits";
 
 /** The same dot the tickable rows use, so a finished workout reads as finished. */
@@ -44,7 +45,7 @@ function Dot({ done }: { done: boolean }) {
 
 function Row({ habit, today }: { habit: Habit; today: string }) {
   const done = habit.days.includes(today);
-  const streak = currentStreak(habit.days, today);
+  const streak = currentStreak(habit.days, today, habit.schedule);
 
   return (
     <div className="flex items-center gap-3 py-1.5">
@@ -128,14 +129,19 @@ export function HabitsTodayPanel({ today }: { today: string }) {
      of the way until the programme is installed. */
   const showWorkout = progress.total > 0;
 
+  /* Only what is due today. A weekday habit has no business nagging on a
+     Saturday, and showing it there is what made "done today" look unfinished. */
+  const due = state.habits.filter((h) => isScheduled(today, h.schedule));
+
   /* Unfinished first. A ticked row stays listed, but leaving it where it was
      pushed the things still worth doing to the bottom of the list exactly as the
      day got done. Order within each group is creation order, so rows never
      reshuffle for no reason. */
-  const open = state.habits.filter((h) => !h.days.includes(today));
-  const done = state.habits.filter((h) => h.days.includes(today));
-  const total = state.habits.length + (showWorkout ? 1 : 0);
+  const open = due.filter((h) => !h.days.includes(today));
+  const done = due.filter((h) => h.days.includes(today));
+  const total = due.length + (showWorkout ? 1 : 0);
   const left = open.length + (showWorkout && !progress.complete ? 1 : 0);
+  const hasAny = state.habits.length > 0;
 
   return (
     <section className="panel flex flex-col p-5 lg:col-span-5">
@@ -149,11 +155,17 @@ export function HabitsTodayPanel({ today }: { today: string }) {
       </div>
 
       {total === 0 ? (
-        <EmptyState
-          title="Nothing to keep track of yet."
-          detail="Add a habit and it joins this list every day. Tap the circle to mark one done, and the streak builds itself from there."
-          action={{ href: "/tasks", label: "Add a habit to Plan" }}
-        />
+        hasAny ? (
+          <div className="tile mt-3 px-3 py-3 text-xs text-ink-3">
+            Nothing scheduled today. Habits return on the days they are set for.
+          </div>
+        ) : (
+          <EmptyState
+            title="Nothing to keep track of yet."
+            detail="Add a habit, choose the days it happens, and it joins this list on those days only. Tap the circle to mark one done, and the streak builds from there."
+            action={{ href: "/tasks", label: "Add a habit to Plan" }}
+          />
+        )
       ) : (
         <div className="mt-2 flex flex-1 flex-col justify-center">
           {showWorkout ? <WorkoutRow progress={progress} streak={workoutStreak} /> : null}

@@ -154,6 +154,9 @@ const EventRow = z.object({
 const HabitRow = z.object({
   ...Row,
   name: z.string().max(200),
+  /* ISO weekdays, 1 = Monday … 7 = Sunday. Empty means every day, so a client that
+     predates schedules keeps working. The 7 cap is the whole domain. */
+  schedule: z.array(z.number().int().min(1).max(7)).max(7).default([]),
   days: z.array(Day).max(10_000).default([]),
   position: z.number().int().min(0).max(10_000),
 });
@@ -657,6 +660,7 @@ export async function GET(request: Request): Promise<Response> {
   const habitsOut = planHabits.map((h) => ({
     clientId: h.clientId,
     name: h.name,
+    schedule: h.schedule,
     days: daysByHabit.get(h.clientId) ?? [],
     updatedAt: h.updatedAt,
     position: h.position,

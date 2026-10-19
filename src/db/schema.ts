@@ -151,6 +151,11 @@ export const habits = pgTable(
       .notNull()
       .references(() => profiles.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
+    /** ISO weekdays the habit is due: 1 = Monday … 7 = Sunday. Empty means every
+     *  day, which is what every habit created before schedules existed becomes.
+     *  jsonb rather than a join table: a schedule has no identity of its own and is
+     *  replaced wholesale. */
+    schedule: jsonb("schedule").$type<number[]>().notNull().default([]),
     /** Order in the list, since there is nothing else to sort by. */
     position: integer("position").notNull().default(0),
     archivedAt: timestamp("archived_at", { withTimezone: true }),

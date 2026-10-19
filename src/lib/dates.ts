@@ -86,6 +86,14 @@ export function weekStart(date: string): string {
   return addDays(date, -((dow + 6) % 7));
 }
 
+/** ISO weekday: 1 = Monday … 7 = Sunday. Monday-first, to match weekStart and
+ *  the way a "school week" is counted. */
+export function isoWeekday(date: string): number {
+  const [y, m, d] = date.split("-").map(Number);
+  const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  return dow === 0 ? 7 : dow;
+}
+
 /** Every day key in a month, from the 1st to the last. */
 export function monthDays(month: string): string[] {
   const [y, m] = month.split("-").map(Number);

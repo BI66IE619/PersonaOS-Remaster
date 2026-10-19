@@ -1,4 +1,5 @@
 import { createStore } from "@/lib/create-store";
+import { EVERY_DAY, normalizeSchedule } from "@/lib/habit-schedule";
 import { EMPTY_HABITS, type Habit, type HabitsState } from "@/lib/types-habits";
 
 const KEY = "personaos:habits";
@@ -50,6 +51,7 @@ export function revive(raw: unknown): HabitsState {
         id: c.id,
         name: c.name.slice(0, 60),
         createdAt: isStr(c.createdAt) ? c.createdAt : new Date(0).toISOString(),
+        schedule: normalizeSchedule(c.schedule),
         days,
         /* Habits saved before the clock existed read as long ago, so a stale push
            from this record loses to anything the server already knows. */
@@ -98,12 +100,26 @@ export function claimHabitsOwnership(userId: string): HabitsState {
  * The pure core, kept free of I/O so the merge can be tested without a browser.
  * ------------------------------------------------------------------------ */
 
-export function addHabitPure(state: HabitsState, name: string): HabitsState {
+export function addHabitPure(
+  state: HabitsState,
+  name: string,
+  schedule: readonly number[] = EVERY_DAY,
+): HabitsState {
   const stamp = now();
   return {
     ...state,
     seeded: true,
-    habits: [...state.habits, { id: uid(), name, createdAt: stamp, days: [], updatedAt: stamp }],
+    habits: [
+      ...state.habits,
+      {
+        id: uid(),
+        name,
+        createdAt: stamp,
+        schedule: normalizeSchedule(schedule),
+        days: [],
+        updatedAt: stamp,
+      },
+    ],
   };
 }
 
@@ -154,6 +170,23 @@ export function renameHabitPure(state: HabitsState, id: string, name: string): H
   };
 }
 
+/** Change which weekdays a habit is due, moving the clock so it travels. */
+export function setHabitSchedulePure(
+  state: HabitsState,
+  id: string,
+  schedule: readonly number[],
+): HabitsState {
+  if (!state.habits.some((h) => h.id === id)) return state;
+  const next = normalizeSchedule(schedule);
+  return {
+    ...state,
+    seeded: true,
+    habits: state.habits.map((h) =>
+      h.id === id ? { ...h, schedule: next, updatedAt: stampAfter(h.updatedAt) } : h,
+    ),
+  };
+}
+
 export function removeHabitPure(state: HabitsState, id: string): HabitsState {
   if (!state.habits.some((h) => h.id === id)) return state;
   return {
@@ -189,6 +222,7 @@ function reviveHabit(raw: unknown): Habit | null {
     id: o.clientId,
     name: o.name.slice(0, 60),
     createdAt: stamp,
+    schedule: normalizeSchedule(o.schedule),
     days: Array.isArray(o.days) ? [...new Set(o.days.filter(isDay))].sort() : [],
     updatedAt: stamp,
   };
@@ -252,6 +286,7 @@ export function habitPayload(h: Habit, position: number) {
   return {
     clientId: h.id,
     name: h.name,
+    schedule: h.schedule,
     days: h.days,
     updatedAt: h.updatedAt,
     position,
@@ -262,8 +297,12 @@ export function habitPayload(h: Habit, position: number) {
  * The store's exported callers.
  * ------------------------------------------------------------------------ */
 
-export function addHabit(name: string) {
-  store.update((s) => addHabitPure(s, name));
+export function addHabit(name: string, schedule: readonly number[] = EVERY_DAY) {
+  store.update((s) => addHabitPure(s, name, schedule));
+}
+
+export function setHabitSchedule(id: string, schedule: readonly number[]) {
+  store.update((s) => setHabitSchedulePure(s, id, schedule));
 }
 
 export function toggleHabit(id: string, day: string) {
