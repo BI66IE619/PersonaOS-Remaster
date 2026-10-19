@@ -78,14 +78,15 @@ try {
   await dal.tombstoneNotes(TEST_USER, [DAY]);
   check("a tombstone hides the note", (await dal.getNotes(TEST_USER)).length === 0);
 
-  console.log("\ncheck-ins carry soreness");
+  console.log("\ncheck-ins carry soreness and the day's win");
   await dal.upsertCheckins(TEST_USER, [
-    { clientId: DAY, day: DAY, text: "", mood: 2, energy: 4, soreness: 5, updatedAt: LATER },
+    { clientId: DAY, day: DAY, text: "Finished the essay", mood: 2, energy: 4, soreness: 5, updatedAt: LATER },
   ]);
   const checkins = await dal.getCheckins(TEST_USER);
   check("one check-in written", checkins.length === 1, `${checkins.length}`);
   check("soreness round-trips", checkins[0].soreness === 5, `${checkins[0].soreness}`);
   check("mood and energy round-trip", checkins[0].mood === 2 && checkins[0].energy === 4);
+  check("the win round-trips in the text column", checkins[0].text === "Finished the essay", checkins[0].text);
   await dal.tombstoneCheckins(TEST_USER, [DAY]);
   check("a check-in tombstone hides it", (await dal.getCheckins(TEST_USER)).length === 0);
 

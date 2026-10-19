@@ -172,8 +172,13 @@ check("note payload has clientId and day", np.clientId === DAY && np.day === DAY
 check("note payload sends text", np.text === "x");
 const cp = checkinPayload({ date: DAY, energy: 4, mood: 2, soreness: 5, updatedAt: LATER });
 check("checkin payload sends the three scales", cp.energy === 4 && cp.mood === 2 && cp.soreness === 5);
-check("checkin payload sends blank text", cp.text === "");
-check("checkin payload nulls an unrated scale", checkinPayload({ date: DAY, energy: 0, mood: 0, soreness: 0, updatedAt: LATER }).energy === null);
+check("checkin payload sends blank text when there is no win", cp.text === "");
+check(
+  "checkin payload carries the win in the text column",
+  checkinPayload({ date: DAY, energy: 4, mood: 2, soreness: 5, win: "Finished the essay", updatedAt: LATER }).text ===
+    "Finished the essay",
+);
+check("checkin payload nulls an unrated scale", checkinPayload({ date: DAY, energy: 0, mood: 0, soreness: 0, win: "", updatedAt: LATER }).energy === null);
 
 console.log("\nsport sessions merge by id, manual only in the payload");
 const sportsState = (sessions = [], pendingDeletes = []) => ({

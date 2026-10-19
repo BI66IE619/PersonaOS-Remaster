@@ -204,6 +204,33 @@ check("duplicate day collapsed", clean.filter((e) => e.date === localDayKey(-1))
 check("future day dropped", clean.every((e) => e.date <= localDayKey()));
 check("no crash from hostile data", errors.length === 0, errors.join(" | ") || "none");
 
+/* ---- a day with only a win is a real check-in ---- */
+await page.evaluate((d) => {
+  localStorage.setItem(
+    "personaos:checkins",
+    JSON.stringify({
+      seeded: true,
+      entries: [
+        {
+          date: d,
+          energy: 0,
+          mood: 0,
+          soreness: 0,
+          win: "Got out of bed",
+          updatedAt: new Date().toISOString(),
+        },
+      ],
+    }),
+  );
+}, days.d0);
+await page.reload({ waitUntil: "load" });
+await page.waitForTimeout(1400);
+const winOnly = await page.evaluate((d) => {
+  const s = JSON.parse(localStorage.getItem("personaos:checkins") ?? "{}");
+  return (s.entries ?? []).find((x) => x.date === d) ?? null;
+}, days.d0);
+check("a day with only a win is kept", winOnly?.win === "Got out of bed", JSON.stringify(winOnly));
+
 /* ---- clear all ---- */
 await panel.getByText("Clear all check-ins").click();
 await page.waitForTimeout(400);

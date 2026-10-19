@@ -31,13 +31,16 @@ function normalize(raw: unknown): StoredCheckIn | null {
   const energy = scale(o.energy);
   const mood = scale(o.mood);
   const soreness = scale(o.soreness);
-  /* Nothing rated is not a check-in. */
-  if (!energy && !mood && !soreness) return null;
+  const win = isStr(o.win) ? o.win.slice(0, 2000) : "";
+  /* Nothing rated and no win is not a check-in. A day with only a win is: naming
+     the win is the part the box is for. */
+  if (!energy && !mood && !soreness && !win) return null;
   return {
     date: o.date,
     energy,
     mood,
     soreness,
+    win,
     updatedAt: isStr(o.updatedAt) ? o.updatedAt : new Date(0).toISOString(),
   };
 }
@@ -130,11 +133,13 @@ export function saveCheckIn(date: string, patch: Omit<CheckIn, "date">) {
     energy: scale(patch.energy),
     mood: scale(patch.mood),
     soreness: scale(patch.soreness),
+    win: (patch.win ?? "").slice(0, 2000).trim(),
     updatedAt: stampAfter(existing?.updatedAt),
   };
-  /* Clearing every scale should drop the day rather than leave an empty row and
-     owes the server a tombstone for the same reason a note delete does. */
-  if (!next.energy && !next.mood && !next.soreness) {
+  /* Clearing every scale and the win should drop the day rather than leave an
+     empty row and owes the server a tombstone for the same reason a note delete
+     does. The UI requires a win, so this is the explicit Clear path. */
+  if (!next.energy && !next.mood && !next.soreness && !next.win) {
     if (!existing) return;
     store.set(withTombstone(s, date, s.entries.filter((e) => e.date !== date)));
     return;
@@ -177,12 +182,15 @@ function reviveRemote(raw: unknown): StoredCheckIn | null {
   const energy = scale(o.energy);
   const mood = scale(o.mood);
   const soreness = scale(o.soreness);
-  if (!energy && !mood && !soreness) return null;
+  /* The win rides in the check-in's text column; this is the only reader of it. */
+  const win = isStr(o.text) ? o.text.slice(0, 2000) : "";
+  if (!energy && !mood && !soreness && !win.trim()) return null;
   return {
     date: day,
     energy,
     mood,
     soreness,
+    win,
     updatedAt: isStr(o.updatedAt) ? o.updatedAt : new Date(0).toISOString(),
   };
 }
@@ -211,13 +219,14 @@ export function mergeRemote(
   return { ...state, entries: entries.sort(sortDesc) };
 }
 
-/** A check-in as pushed. Text is always blank now — the writing moved to Notes,
- *  and the server column is kept only for an older client. */
+/** A check-in as pushed. The day's win rides in the legacy `text` column, which
+ *  the app otherwise never wrote — that is what makes it sync without a new column
+ *  or a migration. */
 export function checkinPayload(c: StoredCheckIn) {
   return {
     clientId: c.date,
     day: c.date,
-    text: "",
+    text: c.win ?? "",
     mood: c.mood || null,
     energy: c.energy || null,
     soreness: c.soreness || null,

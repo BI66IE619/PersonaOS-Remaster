@@ -103,7 +103,9 @@ export function LoggedTodayPanel({ today, workouts }: { today: string; workouts?
             ciDone
               ? rated > 0
                 ? `${rated} of 3 rated`
-                : "rated"
+                : ci?.win
+                  ? "win noted"
+                  : "rated"
               : "Not rated yet"
           }
           cta="Vitality"

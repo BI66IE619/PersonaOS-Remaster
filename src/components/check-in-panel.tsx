@@ -106,8 +106,8 @@ function ConfirmClearCheckIns({
         </p>
 
         <p className="mt-2 text-[11px] leading-relaxed text-ink-3">
-          That removes every rated day — the energy, mood and soreness history the row
-          above is drawn from. There is no undo.
+          That removes every rated day — the energy, mood and soreness history, and the
+          win you wrote for each — the row above is drawn from. There is no undo.
         </p>
 
         <div className="mt-4 flex items-center justify-end gap-2">
@@ -167,25 +167,36 @@ export function CheckInPanel({ today }: { today: string }) {
 
   const rate = (key: ScaleKey, n: number) => {
     setSaved(false);
-    const base = entry ?? { date: selected, energy: 0, mood: 0, soreness: 0 };
+    const base = entry ?? { date: selected, energy: 0, mood: 0, soreness: 0, win: "" };
     const current = base[key] ?? 0;
     /* 0 means "not rated", so tapping the active rating has to clear it again
        or a mis-tap can never be undone. */
     setDraft({ ...base, date: selected, [key]: current === n ? 0 : n });
   };
 
+  const setWin = (value: string) => {
+    setSaved(false);
+    const base = entry ?? { date: selected, energy: 0, mood: 0, soreness: 0, win: "" };
+    setDraft({ ...base, date: selected, win: value });
+  };
+
   const save = () => {
     if (!entry) return;
-    saveCheckIn(selected, { energy: entry.energy, mood: entry.mood, soreness: entry.soreness });
+    saveCheckIn(selected, {
+      energy: entry.energy,
+      mood: entry.mood,
+      soreness: entry.soreness,
+      win: entry.win,
+    });
     setDraft(null);
     setSaved(true);
   };
 
-  const rated = !!entry && (!!entry.energy || !!entry.mood || !!entry.soreness);
-  /* An existing day can be emptied out to delete it, so keep the button live
-     when there is something stored to clear. Otherwise clearing every scale
-     would disable the only control that could remove the row. */
-  const canSave = rated || !!stored;
+  const hasWin = !!entry?.win.trim();
+  /* The win is what the day is for, so Save stays disabled until there is one.
+     Ratings alone do not complete a day, and an old entry without a win cannot be
+     re-saved without adding one. */
+  const canSave = hasWin;
 
   /* Oldest on the left, today on the right, so the row reads left to right the
      way a week does. */
@@ -240,6 +251,30 @@ export function CheckInPanel({ today }: { today: string }) {
         ))}
       </div>
 
+      {/* The win, in its own box: the part of a day that survives a bad one, and
+          the one thing that is required. Save stays disabled until it is named. */}
+      <div className="mt-4 rounded-lg border border-hairline-strong bg-white/[0.03] p-3">
+        <label htmlFor="checkin-win" className="label-xs">
+          One good thing
+        </label>
+        <p className="mt-1 text-[11px] leading-relaxed text-ink-3">
+          A reason today counted, however small. This is the part worth keeping from a
+          day that went wrong.
+        </p>
+        <textarea
+          id="checkin-win"
+          value={entry?.win ?? ""}
+          onChange={(e) => setWin(e.target.value)}
+          rows={2}
+          maxLength={2000}
+          placeholder="What went right, even a little?"
+          className="mt-2 w-full resize-none rounded-lg border border-hairline bg-white/[0.07] px-3 py-2 text-[13px] leading-relaxed text-ink placeholder:text-ink-3 focus:border-[var(--color-accent)] focus:outline-none"
+        />
+        {!hasWin ? (
+          <p className="mt-1.5 text-[10px] text-ink-3">Name one to save the day.</p>
+        ) : null}
+      </div>
+
       <div className="mt-4 flex items-center gap-3">
         <button
           type="button"
@@ -276,6 +311,10 @@ export function CheckInPanel({ today }: { today: string }) {
             {days.map((d) => {
               const e = byDay(d);
               const isToday = d === today;
+              /* A day with a win but no ratings is logged, just unscored — it gets
+                 the accent rather than a tone it did not earn, and grey stays for
+                 days with nothing at all. */
+              const scored = e ? e.energy || e.mood || e.soreness : 0;
               return (
                 <li key={d} className="flex-1">
                   {/* A button, so a past day can be opened and read — and fixed — the
@@ -287,7 +326,7 @@ export function CheckInPanel({ today }: { today: string }) {
                     aria-pressed={selected === d}
                     aria-label={
                       e
-                        ? `${shortDayLabel(d)}: energy ${e.energy || "–"}, mood ${e.mood || "–"}, soreness ${e.soreness || "–"}`
+                        ? `${shortDayLabel(d)}: energy ${e.energy || "–"}, mood ${e.mood || "–"}, soreness ${e.soreness || "–"}${e.win ? ", win noted" : ""}`
                         : `${shortDayLabel(d)}: not logged`
                     }
                     className={[
@@ -309,7 +348,11 @@ export function CheckInPanel({ today }: { today: string }) {
                     <span
                       className="mt-1 block h-1.5 rounded-full"
                       style={{
-                        background: e ? TONE_COLOR[dayTone(e)] : "var(--color-hairline-strong)",
+                        background: e
+                          ? scored
+                            ? TONE_COLOR[dayTone(e)]
+                            : "var(--color-accent-dim)"
+                          : "var(--color-hairline-strong)",
                         opacity: e ? 1 : 0.6,
                       }}
                     />

@@ -51,6 +51,11 @@ export type CheckIn = {
   energy: number;
   mood: number;
   soreness: number;
+  /** The one reason the day counted — the win. Kept with the scales for the same
+   *  day, and required before the check-in can be saved: the point of the box is
+   *  that every day, however bad, leaves with one good thing named. Stored in the
+   *  check-in's otherwise-unused text column, so it syncs with the rest of the day. */
+  win: string;
 };
 
 export type TodayView = {
