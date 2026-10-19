@@ -55,7 +55,7 @@ export function SleepInsights({ series }: { series: SleepPoint[] }) {
 
       {points.length >= 2 ? (
         <div className="mb-4 flex min-h-0 flex-1 flex-col">
-          <div className="min-h-[96px] flex-1">
+          <div className="relative min-h-[96px] flex-1">
             <Sparkline
               points={points}
               mean={mean}

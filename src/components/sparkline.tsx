@@ -51,7 +51,16 @@ export function Sparkline({
     <svg
       viewBox={`0 0 ${W} ${H}`}
       preserveAspectRatio="none"
-      style={{ height: fill ? "100%" : H, width: "100%" }}
+      /* Absolute in fill mode. A percentage height on an in-flow SVG with no
+         definite parent height falls back to the viewBox's aspect ratio, which
+         makes the chart as tall as the panel is wide — that is what blew the
+         panel up. Out of flow, it contributes nothing to the panel's intrinsic
+         height and simply covers whatever box the parent ends up with. */
+      style={
+        fill
+          ? { position: "absolute", inset: 0, width: "100%", height: "100%" }
+          : { height: H, width: "100%" }
+      }
       role="img"
       aria-label={ariaLabel}
     >
