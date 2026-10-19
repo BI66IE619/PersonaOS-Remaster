@@ -54,14 +54,17 @@ export function SleepInsights({ series }: { series: SleepPoint[] }) {
       </div>
 
       {points.length >= 2 ? (
-        <div className="mb-4">
-          <Sparkline
-            points={points}
-            mean={mean}
-            color={color}
-            height={96}
-            ariaLabel={`How many hours you slept each night over the last ${points.length} nights. Last night ${last.toFixed(1)} hours, your usual night ${mean.toFixed(1)} hours.`}
-          />
+        <div className="mb-4 flex min-h-0 flex-1 flex-col">
+          <div className="min-h-[96px] flex-1">
+            <Sparkline
+              points={points}
+              mean={mean}
+              color={color}
+              height={96}
+              fill
+              ariaLabel={`How many hours you slept each night over the last ${points.length} nights. Last night ${last.toFixed(1)} hours, your usual night ${mean.toFixed(1)} hours.`}
+            />
+          </div>
           {/* Plain words for what the line means. A sparkline with a dashed
               reference asks the reader to work out which line is which and what
               direction is good; this says it outright. */}
@@ -77,12 +80,11 @@ export function SleepInsights({ series }: { series: SleepPoint[] }) {
         </div>
       ) : null}
 
-      {/* No mt-auto: the panel still stretches to match its neighbour, but the
-          readings now follow the trend instead of being pinned to the bottom. With
-          mt-auto, every extra pixel the check-in box gained became a gap between
-          the line and these two tiles, which read as the panel coming apart. Any
-          spare height now sits below the content, where it reads as padding. */}
-      <div className="space-y-3">
+      {/* The trend above takes the spare height (it is flex-1), so the panel is
+          filled rather than split: the line gets taller and the readings follow it
+          at the bottom, with no gap to open up when the check-in box beside it
+          grows. */}
+      <div className="shrink-0 space-y-3">
         <Read
           title="Sleep debt"
           body={debt.verdict}

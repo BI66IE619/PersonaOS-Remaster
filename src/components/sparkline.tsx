@@ -12,12 +12,17 @@ export function Sparkline({
   mean,
   color = "var(--color-accent)",
   height = 40,
+  fill = false,
   ariaLabel,
 }: {
   points: { value: number }[];
   mean: number;
   color?: string;
   height?: number;
+  /** Stretch to the parent's height instead of a fixed pixel height. The viewBox
+   *  keeps its own geometry and preserveAspectRatio="none" does the stretching, so
+   *  a panel can give the line whatever vertical room it has left. */
+  fill?: boolean;
   ariaLabel?: string;
 }) {
   const uid = useId().replace(/:/g, "");
@@ -26,7 +31,7 @@ export function Sparkline({
   const pad = 3;
 
   if (points.length < 2) {
-    return <div style={{ height: H }} />;
+    return <div style={{ height: fill ? "100%" : H }} />;
   }
 
   const values = points.map((p) => p.value);
@@ -46,7 +51,7 @@ export function Sparkline({
     <svg
       viewBox={`0 0 ${W} ${H}`}
       preserveAspectRatio="none"
-      style={{ height: H, width: "100%" }}
+      style={{ height: fill ? "100%" : H, width: "100%" }}
       role="img"
       aria-label={ariaLabel}
     >
