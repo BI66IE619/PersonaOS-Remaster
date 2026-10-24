@@ -28,7 +28,6 @@ import { EmptyState } from "@/components/empty-state";
 const DOW = ["M", "T", "W", "T", "F", "S", "S"] as const;
 const DOW_FULL = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 const MAX_DOTS = 3;
-const DURATIONS = [15, 30, 45, 60, 90, 120, 180] as const;
 
 const toMin = (hhmm: string): number | null => {
   if (!hhmm) return null;
@@ -72,6 +71,7 @@ export function MonthCalendar({
   const [title, setTitle] = useState("");
   const [time, setTime] = useState("");
   const [duration, setDuration] = useState(60);
+  const [location, setLocation] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
   const [category, setCategory] = useState<CalCategory>("other");
   const field = useRef<HTMLInputElement>(null);
@@ -95,6 +95,7 @@ export function MonthCalendar({
     setTitle("");
     setTime("");
     setDuration(60);
+    setLocation("");
     setEditing(null);
     setCategory("other");
   };
@@ -108,8 +109,13 @@ export function MonthCalendar({
       title: value,
       date: selected,
       startMin,
-      durationMin: startMin === null ? null : duration,
-      note: "",
+      /* Any length, in minutes, rather than a short list of presets. The form
+         collects it as hours + minutes; a zero-length event is nudged to one
+         minute rather than stored as a point in time. */
+      durationMin: startMin === null ? null : Math.max(1, duration),
+      /* The location rides in the event's otherwise-unused note column, so it
+         syncs with the rest of the event and needs no new column. */
+      note: location.trim(),
       category,
     };
     if (edited) updateEvent(edited.id, payload);
@@ -262,6 +268,7 @@ export function MonthCalendar({
                     <div className="truncate text-sm">{e.title}</div>
                     <div className="num text-[11px] text-ink-3">
                       {rangeLabel(e)} · {categoryLabel(e.category)}
+                      {e.note ? ` · ${e.note}` : ""}
                     </div>
                   </div>
                 </div>
@@ -273,6 +280,7 @@ export function MonthCalendar({
                       setTitle(e.title);
                       setTime(toHHMM(e.startMin));
                       setDuration(e.durationMin ?? 60);
+                      setLocation(e.note);
                       setCategory(e.category);
                     }}
                     className="rounded px-1.5 py-0.5 text-[11px] text-ink-3 transition-colors hover:text-ink-2"
@@ -319,18 +327,37 @@ export function MonthCalendar({
               className="num rounded-lg border border-hairline bg-white/[0.07] px-2.5 py-2 text-sm text-ink focus:border-[var(--color-accent)] focus:outline-none"
             />
             {time ? (
-              <select
-                value={duration}
-                onChange={(e) => setDuration(Number(e.target.value))}
-                aria-label="Event duration"
-                className="num rounded-lg border border-hairline bg-white/[0.07] px-2 py-2 text-sm text-ink focus:border-[var(--color-accent)] focus:outline-none"
-              >
-                {DURATIONS.map((d) => (
-                  <option key={d} value={d} className="bg-[var(--color-raised)]">
-                    {d < 60 ? `${d}m` : `${d / 60}h`}
-                  </option>
-                ))}
-              </select>
+              <div className="flex items-center gap-1" role="group" aria-label="Event duration">
+                <input
+                  type="number"
+                  min={0}
+                  max={24}
+                  value={Math.floor(duration / 60)}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    const h = Number.isFinite(v) ? Math.max(0, Math.min(24, Math.floor(v))) : 0;
+                    setDuration(h * 60 + (duration % 60));
+                  }}
+                  aria-label="Duration hours"
+                  className="num w-12 rounded-lg border border-hairline bg-white/[0.07] px-2 py-2 text-sm text-ink focus:border-[var(--color-accent)] focus:outline-none"
+                />
+                <span className="text-[11px] text-ink-3">h</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={59}
+                  step={5}
+                  value={duration % 60}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    const m = Number.isFinite(v) ? Math.max(0, Math.min(59, Math.floor(v))) : 0;
+                    setDuration(Math.floor(duration / 60) * 60 + m);
+                  }}
+                  aria-label="Duration minutes"
+                  className="num w-12 rounded-lg border border-hairline bg-white/[0.07] px-2 py-2 text-sm text-ink focus:border-[var(--color-accent)] focus:outline-none"
+                />
+                <span className="text-[11px] text-ink-3">m</span>
+              </div>
             ) : null}
             <button
               type="submit"
@@ -349,6 +376,15 @@ export function MonthCalendar({
               </button>
             ) : null}
           </div>
+
+          <input
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            placeholder="Location (optional)"
+            aria-label="Location"
+            maxLength={200}
+            className="mt-2 w-full rounded-lg border border-hairline bg-white/[0.07] px-3 py-2 text-sm text-ink placeholder:text-ink-3 focus:border-[var(--color-accent)] focus:outline-none"
+          />
 
           <fieldset className="mt-2.5 flex flex-wrap items-center gap-1.5">
             <legend className="sr-only">Category</legend>

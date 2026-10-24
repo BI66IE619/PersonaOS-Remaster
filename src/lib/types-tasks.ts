@@ -7,6 +7,8 @@ export type CalEvent = {
   /** Minutes from midnight. Null means all day. */
   startMin: number | null;
   durationMin: number | null;
+  /** The event's optional location. Carried in the note column, which was already
+   *  persisted and synced but never used, so no new column is needed. */
   note: string;
   category: CalCategory;
   /** Legacy flag from the event-driven prompt experiment. No longer set from
