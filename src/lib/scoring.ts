@@ -141,7 +141,15 @@ export function computeReadiness(signals: Signal[]): {
   score: number;
   band: Band;
 } {
-  const weighted = signals.reduce((acc, s) => acc + s.z * s.weight, 0);
+  /* Normalise over the signals actually present. A phone that reports no HRV drops
+     the 0.30-weight signal, and leaving the rest weighted at 0.70 made the whole
+     scale quiet: a one-SD good day could only reach about 56, so the ring sat near
+     half no matter what the day was like. Dividing by the total keeps 50 as the
+     neutral point and restores the intended sensitivity, while changing nothing for
+     a source that reports every signal. */
+  const total = signals.reduce((sum, s) => sum + s.weight, 0);
+  const weighted =
+    total > 0 ? signals.reduce((acc, s) => acc + s.z * s.weight, 0) / total : 0;
   const score = Math.round(clamp(50 + 11 * weighted, 1, 100));
   return { score, band: bandFor(score) };
 }
