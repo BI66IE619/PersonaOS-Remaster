@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { addTask, removeTask, toggleTask } from "@/lib/tasks";
+import { addTask, removeTask, toggleTask, updateTask } from "@/lib/tasks";
 import { EmptyState } from "@/components/empty-state";
 import {
   taskCategoryColor,
@@ -12,6 +12,29 @@ import { addDays, daysBetween, relativeDayLabel } from "@/lib/dates";
 import type { Task } from "@/lib/types-tasks";
 
 const SOON = 14;
+
+function Pencil() {
+  return (
+    <svg viewBox="0 0 12 12" aria-hidden className="h-3 w-3">
+      <path
+        d="M2.6 9.4l.3-1.4 5-5 1.1 1.1-5 5-1.4.3z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.1"
+        strokeLinejoin="round"
+      />
+      <path d="M7.4 3.5l1.1 1.1" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+type Draft = {
+  title: string;
+  subject: string;
+  due: string;
+  someday: boolean;
+  category: TaskCategory;
+};
 
 type Group = { key: string; label: string; tasks: Task[] };
 
@@ -88,6 +111,39 @@ export function TaskPanel({
   const [category, setCategory] = useState<TaskCategory>(categories[0]);
   const [showDone, setShowDone] = useState(false);
 
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<Draft>({
+    title: "",
+    subject: "",
+    due: "",
+    someday: false,
+    category: categories[0],
+  });
+
+  const startEdit = (t: Task) => {
+    setEditingId(t.id);
+    setDraft({
+      title: t.title,
+      subject: t.note,
+      due: t.due ?? "",
+      someday: t.due === null,
+      category: t.category,
+    });
+  };
+
+  const commitEdit = () => {
+    if (!editingId) return;
+    const value = draft.title.trim();
+    if (!value) return;
+    updateTask(editingId, {
+      title: value,
+      due: draft.someday ? null : draft.due || null,
+      category: draft.category,
+      ...(subject ? { subject: draft.subject.trim() } : {}),
+    });
+    setEditingId(null);
+  };
+
   const done = tasks.filter((t) => t.done);
   const groups = group(tasks, today);
 
@@ -103,6 +159,7 @@ export function TaskPanel({
   };
 
   const row = (t: Task) => {
+    const editing = editingId === t.id;
     const parts: string[] = [];
     if (t.due) {
       const diff = daysBetween(today, t.due);
@@ -111,40 +168,161 @@ export function TaskPanel({
     /* A subject when there is one, otherwise the category — which keeps the line
        from going empty on an assignment whose subject was left blank. */
     parts.push(subject && t.note ? t.note : taskCategoryLabel(t.category));
+
     return (
       <li key={t.id} className="group flex items-start gap-2.5 py-1.5">
         <input
           type="checkbox"
           checked={t.done}
           onChange={() => toggleTask(t.id)}
+          disabled={editing}
           aria-label={`Mark "${t.title}" ${t.done ? "not done" : "done"}`}
-          className="mt-0.5 h-4 w-4 shrink-0 accent-white"
+          className="mt-0.5 h-4 w-4 shrink-0 accent-white disabled:opacity-40"
         />
         <span
           aria-hidden
           className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full"
-          style={{ background: taskCategoryColor(t.category) }}
+          style={{ background: taskCategoryColor(editing ? draft.category : t.category) }}
         />
-        <div className="min-w-0 flex-1">
-          <div
-            className="break-words text-sm"
-            style={{
-              color: t.done ? "var(--color-ink-3)" : "var(--color-ink-2)",
-              textDecoration: t.done ? "line-through" : undefined,
-            }}
-          >
-            {t.title}
+
+        {editing ? (
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <input
+              value={draft.title}
+              onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commitEdit();
+                } else if (e.key === "Escape") {
+                  e.preventDefault();
+                  setEditingId(null);
+                }
+              }}
+              aria-label="Task title"
+              maxLength={120}
+              autoFocus
+              className="w-full rounded border border-hairline bg-white/[0.07] px-2 py-1 text-sm text-ink focus:border-[var(--color-accent)] focus:outline-none"
+            />
+
+            {subject ? (
+              <input
+                value={draft.subject}
+                onChange={(e) => setDraft((d) => ({ ...d, subject: e.target.value }))}
+                placeholder="Subject"
+                aria-label="Subject"
+                className="w-full rounded border border-hairline bg-white/[0.07] px-2 py-1 text-xs text-ink placeholder:text-ink-3 focus:border-[var(--color-accent)] focus:outline-none"
+              />
+            ) : null}
+
+            <div className="flex items-center gap-1.5">
+              <input
+                type="date"
+                value={draft.due}
+                onChange={(e) =>
+                  setDraft((d) => ({
+                    ...d,
+                    due: e.target.value,
+                    someday: e.target.value ? false : d.someday,
+                  }))
+                }
+                aria-label="Due date"
+                className={`num rounded border border-hairline bg-white/[0.07] px-2 py-1 text-xs text-ink focus:border-[var(--color-accent)] focus:outline-none ${draft.someday ? "opacity-40" : ""}`}
+              />
+              <button
+                type="button"
+                onClick={() =>
+                  setDraft((d) => ({ ...d, someday: !d.someday, due: d.someday ? d.due : "" }))
+                }
+                aria-pressed={draft.someday}
+                className="rounded border px-2 py-1 text-[10px] transition-colors"
+                style={{
+                  borderColor: draft.someday ? "#ffffff2b" : "var(--color-hairline)",
+                  background: draft.someday ? "#ffffff14" : "transparent",
+                  color: draft.someday ? "var(--color-ink)" : "var(--color-ink-3)",
+                }}
+              >
+                Someday
+              </button>
+            </div>
+
+            {categories.length > 1 ? (
+              <div className="flex flex-wrap items-center gap-1">
+                {categories.map((id) => {
+                  const on = draft.category === id;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      aria-pressed={on}
+                      aria-label={`Task category: ${taskCategoryLabel(id)}`}
+                      onClick={() => setDraft((d) => ({ ...d, category: id }))}
+                      className={[
+                        "rounded-full border px-2 py-0.5 text-[10px] transition-colors",
+                        on
+                          ? "border-[var(--color-accent-dim)] bg-white/[0.07] text-ink"
+                          : "border-hairline text-ink-3 hover:text-ink-2",
+                      ].join(" ")}
+                    >
+                      {taskCategoryLabel(id)}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={commitEdit}
+                disabled={!draft.title.trim()}
+                className="rounded border border-hairline px-2 py-0.5 text-[10px] text-ink-2 transition-colors hover:border-[var(--color-accent)] disabled:opacity-40"
+              >
+                Save
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditingId(null)}
+                className="text-[10px] text-ink-3 transition-colors hover:text-ink-2"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
-          <div className="num text-[11px] text-ink-3">{parts.join(" · ")}</div>
-        </div>
-        <button
-          type="button"
-          onClick={() => removeTask(t.id)}
-          aria-label={`Delete "${t.title}"`}
-          className="shrink-0 rounded px-1 text-[11px] text-ink-3 opacity-100 transition-opacity hover:text-[var(--color-low)] focus-visible:opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
-        >
-          &#10005;
-        </button>
+        ) : (
+          <>
+            <div className="min-w-0 flex-1">
+              <div
+                className="break-words text-sm"
+                style={{
+                  color: t.done ? "var(--color-ink-3)" : "var(--color-ink-2)",
+                  textDecoration: t.done ? "line-through" : undefined,
+                }}
+              >
+                {t.title}
+              </div>
+              <div className="num text-[11px] text-ink-3">{parts.join(" · ")}</div>
+            </div>
+            <div className="flex shrink-0 items-center gap-0.5">
+              <button
+                type="button"
+                onClick={() => startEdit(t)}
+                aria-label={`Edit "${t.title}"`}
+                className="rounded px-1 text-ink-3 opacity-100 transition-opacity hover:text-ink-2 focus-visible:opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
+              >
+                <Pencil />
+              </button>
+              <button
+                type="button"
+                onClick={() => removeTask(t.id)}
+                aria-label={`Delete "${t.title}"`}
+                className="rounded px-1 text-[11px] text-ink-3 opacity-100 transition-opacity hover:text-[var(--color-low)] focus-visible:opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
+              >
+                &#10005;
+              </button>
+            </div>
+          </>
+        )}
       </li>
     );
   };

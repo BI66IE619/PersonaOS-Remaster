@@ -205,6 +205,33 @@ export function addTaskPure(
   };
 }
 
+/** An edit to an existing task. Only the fields present in `patch` move; the clock
+ *  always does, so the change can travel. The subject rides in the note column,
+ *  same as when the task was created. */
+export function updateTaskPure(
+  state: TasksState,
+  id: string,
+  patch: { title?: string; due?: string | null; category?: TaskCategory; subject?: string },
+): TasksState {
+  if (!state.tasks.some((t) => t.id === id)) return state;
+  return {
+    ...state,
+    seeded: true,
+    tasks: state.tasks.map((t) => {
+      if (t.id !== id) return t;
+      return {
+        ...t,
+        title: patch.title !== undefined ? patch.title.slice(0, 120) : t.title,
+        due: patch.due !== undefined ? patch.due : t.due,
+        category:
+          patch.category !== undefined ? normalizeTaskCategory(patch.category) : t.category,
+        note: patch.subject !== undefined ? patch.subject.slice(0, 500) : t.note,
+        updatedAt: stampAfter(t.updatedAt),
+      };
+    }),
+  };
+}
+
 /** Toggle done, moving the clock so the change can travel. */
 export function toggleTaskPure(state: TasksState, id: string): TasksState {
   if (!state.tasks.some((t) => t.id === id)) return state;
@@ -426,6 +453,13 @@ export function addTask(
   subject = "",
 ) {
   store.update((s) => addTaskPure(s, title, due, category, subject));
+}
+
+export function updateTask(
+  id: string,
+  patch: { title?: string; due?: string | null; category?: TaskCategory; subject?: string },
+) {
+  store.update((s) => updateTaskPure(s, id, patch));
 }
 
 export function toggleTask(id: string) {

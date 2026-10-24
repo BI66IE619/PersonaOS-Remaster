@@ -21,6 +21,7 @@ import {
   revive as reviveTasks,
   taskPayload,
   toggleTaskPure,
+  updateTaskPure,
 } from "../src/lib/tasks.ts";
 import { EMPTY_HABITS } from "../src/lib/types-habits.ts";
 import {
@@ -158,6 +159,26 @@ console.log("\nplan sync: the merge, the payloads, the tombstones\n");
   const kept = mergeTasks(local, stale);
   check("an older remote edit is ignored", kept.tasks[0]?.title === "Read chapter 4");
   check("and leaves the local one done as it was", kept.tasks[0]?.done === false);
+}
+
+/* ---- 3b. editing an existing task in place ---- */
+{
+  const s = addTaskPure(EMPTY_TASKS, "Essay", DAY, "assignments", "History");
+  const id = s.tasks[0].id;
+  const edited = updateTaskPure(s, id, {
+    title: "Essay, 1500 words",
+    due: "2026-10-20",
+    category: "assignments",
+    subject: "History (revised)",
+  });
+
+  check("the title is edited", edited.tasks[0]?.title === "Essay, 1500 words");
+  check("the due date is edited", edited.tasks[0]?.due === "2026-10-20");
+  check("the subject is edited in the note column", edited.tasks[0]?.note === "History (revised)");
+  check("the id is kept, so it is not a new task", edited.tasks[0]?.id === id);
+  check("and the clock moves so the edit travels", edited.tasks[0]?.updatedAt > s.tasks[0].updatedAt);
+  check("a patch field left out is untouched", updateTaskPure(s, id, { title: "X" }).tasks[0]?.due === DAY);
+  check("editing an unknown id changes nothing", updateTaskPure(s, "nope", { title: "X" }) === s);
 }
 
 /* ---- 4. silence is not a delete ---- */
