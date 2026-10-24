@@ -13,6 +13,7 @@
 import "server-only";
 
 import { decryptSecret, encryptSecret } from "@/lib/finance/crypto";
+import { categorize } from "@/lib/finance/categorize";
 import { ensureProfile } from "@/lib/dal";
 import { db } from "@/db";
 import { eq, and, sql } from "drizzle-orm";
@@ -539,10 +540,10 @@ async function persist(
           day: r.day,
           amountCents: r.amountCents,
           note: r.note,
-          /* Left null: categorisation is the app's job and a rule pass has not been
-             written yet. Assigning everything to a bucket at ingest would bury a
-             miscategorisation in the database instead of surfacing it. */
-          categoryId: null,
+          /* Categorised as it lands, by the rule pass in categorize.ts. Null is a
+             real outcome — an unrecognised payee belongs in Other — but it must be
+             the rule pass saying so, not this insert never asking. */
+          categoryId: categorize(r.note, r.amountCents),
           pending: r.pending,
           updatedAt: now,
         })),
@@ -556,6 +557,11 @@ async function persist(
         set: {
           amountCents: excluded("amount_cents"),
           note: excluded("note"),
+          /* Re-run the rules on every sync, so rows stored before the rules were
+             wired in (all of them, when this was added) are corrected on the next
+             pull instead of staying in Other forever. There is no hand-edited
+             category to overwrite — the app has no manual categorisation. */
+          categoryId: excluded("category_id"),
           pending: excluded("pending"),
           updatedAt: now,
         },

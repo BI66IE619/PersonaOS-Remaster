@@ -12,6 +12,7 @@
  */
 import "server-only";
 
+import { categorize } from "@/lib/finance/categorize";
 import { and, eq, gte, lte } from "drizzle-orm";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
@@ -110,14 +111,15 @@ const txRows = mainAccountId
 
   /* Mapped into the app's own Transaction type, so buildMoneyView does not need to
      know that rows come from Postgres. categoryId is nullable in the database and
-     the view expects a string, so an uncategorised row gets the same "other" bucket
-     the seed uses — visible as a category rather than silently dropped from the
-     category bars while still counting toward the total. */
+     the view expects a string. A null is recategorised here from the payee before
+     falling back to Other: every row stored before the rule pass was wired in is
+     null, and waiting for the next sync to fix them would leave the ledger showing
+     one category for up to a day. */
   const transactions: Transaction[] = txRows.map((r) => ({
     id: `${r.accountId}:${r.sourceId}`,
     date: r.day,
     amountCents: r.amountCents,
-    categoryId: r.categoryId ?? "other",
+    categoryId: r.categoryId ?? categorize(r.note, r.amountCents) ?? "other",
     note: r.note,
     recurring: false,
   }));
