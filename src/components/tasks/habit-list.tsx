@@ -1,7 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { addHabit, removeHabit, renameHabit, setHabitSchedule, toggleHabit } from "@/lib/habits";
+import {
+  addHabit,
+  moveHabit,
+  removeHabit,
+  renameHabit,
+  setHabitSchedule,
+  toggleHabit,
+} from "@/lib/habits";
 import { bestStreak, currentStreak } from "@/lib/streaks";
 import { addDays } from "@/lib/dates";
 import { EVERY_DAY, WEEKDAYS, isScheduled, scheduleLabel } from "@/lib/habit-schedule";
@@ -51,6 +58,21 @@ function Pencil() {
         strokeLinejoin="round"
       />
       <path d="M7.4 3.5l1.1 1.1" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function Caret({ up }: { up: boolean }) {
+  return (
+    <svg viewBox="0 0 12 12" aria-hidden className="h-2.5 w-2.5">
+      <path
+        d={up ? "M3 7.5 6 4.5l3 3" : "M3 4.5 6 7.5l3-3"}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -106,10 +128,18 @@ function HabitRow({
   habit,
   today,
   onAskDelete,
+  canUp,
+  canDown,
+  onMoveUp,
+  onMoveDown,
 }: {
   habit: Habit;
   today: string;
   onAskDelete: (habit: Habit) => void;
+  canUp: boolean;
+  canDown: boolean;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
 }) {
   const done = new Set(habit.days);
   const scheduledToday = isScheduled(today, habit.schedule);
@@ -262,6 +292,26 @@ function HabitRow({
           <p className="mt-1 text-[9px] uppercase tracking-wider text-ink-3">best</p>
         </div>
         <div className="flex items-center gap-1">
+          <div className="flex flex-col">
+            <button
+              type="button"
+              aria-label={`Move "${habit.name}" up`}
+              onClick={onMoveUp}
+              disabled={!canUp}
+              className="grid h-3.5 w-5 place-items-center rounded text-ink-3 transition-colors hover:bg-white/[0.07] hover:text-ink-2 disabled:opacity-20"
+            >
+              <Caret up />
+            </button>
+            <button
+              type="button"
+              aria-label={`Move "${habit.name}" down`}
+              onClick={onMoveDown}
+              disabled={!canDown}
+              className="grid h-3.5 w-5 place-items-center rounded text-ink-3 transition-colors hover:bg-white/[0.07] hover:text-ink-2 disabled:opacity-20"
+            >
+              <Caret up={false} />
+            </button>
+          </div>
           <button
             type="button"
             aria-label={`Rename habit "${habit.name}"`}
@@ -387,6 +437,7 @@ export function HabitList({ habits, today }: { habits: Habit[]; today: string })
   const [name, setName] = useState("");
   const [days, setDays] = useState<number[]>(EVERY_DAY);
   const [asking, setAsking] = useState<Habit | null>(null);
+  const [showNotDue, setShowNotDue] = useState(true);
   const field = useRef<HTMLInputElement>(null);
 
   /* Stable, so the dialog's focus and Escape listener are not torn down and set
@@ -405,6 +456,13 @@ export function HabitList({ habits, today }: { habits: Habit[]; today: string })
     setName("");
   };
 
+  /* Split at the schedule boundary, in stored order within each group. The two
+     read as separate lists rather than one list with a few faded rows, and the
+     move buttons' neighbours are the ones in the same group — moving a habit past
+     a day it is not due on would be meaningless. */
+  const due = habits.filter((h) => isScheduled(today, h.schedule));
+  const notDue = habits.filter((h) => !isScheduled(today, h.schedule));
+
   return (
     <div className="panel flex flex-col p-5">
       <div className="flex items-center justify-between gap-3">
@@ -415,11 +473,56 @@ export function HabitList({ habits, today }: { habits: Habit[]; today: string })
       </div>
 
       {habits.length ? (
-        <ul className="divide-y divide-hairline">
-          {habits.map((h) => (
-            <HabitRow key={h.id} habit={h} today={today} onAskDelete={setAsking} />
-          ))}
-        </ul>
+        <>
+          <ul className="divide-y divide-hairline">
+            {due.map((h, i) => (
+              <HabitRow
+                key={h.id}
+                habit={h}
+                today={today}
+                onAskDelete={setAsking}
+                canUp={i > 0}
+                canDown={i < due.length - 1}
+                onMoveUp={() => moveHabit(h.id, due[i - 1].id)}
+                onMoveDown={() => moveHabit(h.id, due[i + 1].id)}
+              />
+            ))}
+          </ul>
+
+          {notDue.length ? (
+            <div className="mt-3 border-t border-hairline pt-2">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[10px] uppercase tracking-wider text-ink-3">
+                  Not due today
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowNotDue((v) => !v)}
+                  aria-expanded={showNotDue}
+                  className="text-[10px] text-ink-3 transition-colors hover:text-ink-2"
+                >
+                  {showNotDue ? "Hide" : "Show"}
+                </button>
+              </div>
+              {showNotDue ? (
+                <ul className="mt-1 divide-y divide-hairline opacity-60">
+                  {notDue.map((h, i) => (
+                    <HabitRow
+                      key={h.id}
+                      habit={h}
+                      today={today}
+                      onAskDelete={setAsking}
+                      canUp={i > 0}
+                      canDown={i < notDue.length - 1}
+                      onMoveUp={() => moveHabit(h.id, notDue[i - 1].id)}
+                      onMoveDown={() => moveHabit(h.id, notDue[i + 1].id)}
+                    />
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
+        </>
       ) : (
         /* The way out is the field directly below, so the action points at it
            rather than at a link to this same screen. */

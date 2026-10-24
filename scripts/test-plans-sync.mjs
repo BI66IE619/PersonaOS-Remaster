@@ -28,6 +28,7 @@ import {
   addHabitPure,
   habitPayload,
   mergeRemote as mergeHabits,
+  moveHabitPure,
   removeHabitPure,
   renameHabitPure,
   setHabitSchedulePure,
@@ -420,6 +421,38 @@ console.log("\nplan sync: the merge, the payloads, the tombstones\n");
     "a missed scheduled day still breaks it",
     currentStreak(week.filter((d) => d !== "2026-10-06"), "2026-10-10", workdays) === 3,
     `${currentStreak(week.filter((d) => d !== "2026-10-06"), "2026-10-10", workdays)}`,
+  );
+}
+
+/* ---- 12d. habit order ---- */
+{
+  let s = addHabitPure(EMPTY_HABITS, "A");
+  s = addHabitPure(s, "B");
+  s = addHabitPure(s, "C");
+  const [a, b] = s.habits;
+
+  const moved = moveHabitPure(s, b.id, a.id);
+  check("a habit moves ahead of its neighbour", moved.habits.map((h) => h.name).join("") === "BAC");
+  check(
+    "and every habit is restamped so the order travels",
+    moved.habits.every((h) => {
+      const before = s.habits.find((x) => x.id === h.id);
+      return before !== undefined && h.updatedAt > before.updatedAt;
+    }),
+  );
+  check("moving to itself changes nothing", moveHabitPure(s, a.id, a.id) === s);
+
+  /* A full pull carries every habit, so its order is the order. A partial pull is
+     a subset and must not be used to reorder the habits it did not mention. */
+  const full = s.habits.map((h, i) => habitPayload(h, i));
+  const reversed = [...full].reverse();
+  check(
+    "a full pull adopts the server's order",
+    mergeHabits(s, { habits: reversed, deleted: [] }).habits.map((h) => h.name).join("") === "CBA",
+  );
+  check(
+    "an incremental pull leaves the order alone",
+    mergeHabits(s, { habits: [full[2]], deleted: [] }).habits.map((h) => h.name).join("") === "ABC",
   );
 }
 

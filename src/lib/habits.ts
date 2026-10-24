@@ -187,6 +187,30 @@ export function setHabitSchedulePure(
   };
 }
 
+/**
+ * Move a habit into another habit's place, and restamp every habit so the new
+ * order travels.
+ *
+ * Order is the array, and the server stores it as each row's position — which is
+ * only rewritten when that row's clock moves. A reorder therefore has to touch
+ * every row, not just the two being swapped: the rows in between would otherwise
+ * keep their old positions, and the order the phone shows is one the server never
+ * hears. The pull side trusts the order only when a pull carried all of them,
+ * which a full restamp guarantees.
+ */
+export function moveHabitPure(state: HabitsState, id: string, targetId: string): HabitsState {
+  const from = state.habits.findIndex((h) => h.id === id);
+  const to = state.habits.findIndex((h) => h.id === targetId);
+  if (from < 0 || to < 0 || from === to) return state;
+  const next = [...state.habits];
+  [next[from], next[to]] = [next[to], next[from]];
+  return {
+    ...state,
+    seeded: true,
+    habits: next.map((h) => ({ ...h, updatedAt: stampAfter(h.updatedAt) })),
+  };
+}
+
 export function removeHabitPure(state: HabitsState, id: string): HabitsState {
   if (!state.habits.some((h) => h.id === id)) return state;
   return {
@@ -269,6 +293,24 @@ export function mergeRemote(
   );
   if (gone.size) habits = habits.filter((h) => !gone.has(h.id));
 
+  /* The server's array is in position order, but only a pull that carried every
+     habit can be trusted to describe the whole order: an incremental pull is a
+     subset, and sorting by its positions would scatter the habits it did not
+     mention. A reorder restamps every habit, so it does arrive complete — and then
+     the order the server stored is the order this device shows. */
+  const order = new Map<string, number>();
+  remote.habits.forEach((raw, i) => {
+    if (!raw || typeof raw !== "object") return;
+    const id = (raw as Record<string, unknown>).clientId;
+    if (isStr(id)) order.set(id, i);
+  });
+  if (order.size > 0 && habits.every((h) => order.has(h.id))) {
+    const sorted = [...habits].sort(
+      (a, b) => (order.get(a.id) as number) - (order.get(b.id) as number),
+    );
+    if (sorted.some((h, i) => h.id !== habits[i].id)) habits = sorted;
+  }
+
   if (habits === state.habits) return state;
   return { ...state, habits };
 }
@@ -303,6 +345,10 @@ export function addHabit(name: string, schedule: readonly number[] = EVERY_DAY) 
 
 export function setHabitSchedule(id: string, schedule: readonly number[]) {
   store.update((s) => setHabitSchedulePure(s, id, schedule));
+}
+
+export function moveHabit(id: string, targetId: string) {
+  store.update((s) => moveHabitPure(s, id, targetId));
 }
 
 export function toggleHabit(id: string, day: string) {
