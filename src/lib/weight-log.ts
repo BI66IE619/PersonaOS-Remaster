@@ -173,6 +173,36 @@ export function weightDue(
   return { due: latest < monday, daysSince, next };
 }
 
+/**
+ * An estimated weight for a week that was skipped, from the readings around it.
+ *
+ * Straight-line between the last reading before the missed Monday and the first
+ * after it, when there is one, and the last known reading carried forward when
+ * there is not — which is the usual case, since the skip is normally for the week
+ * in progress. Rounded to the tenth the log stores and returned in pounds, so it
+ * can go straight through logWeight. Null only when there is nothing to go on.
+ *
+ * This is an estimate, and the caller says so before writing it: the app's rule is
+ * that it does not invent measurements, but a weight the user asks it to fill for a
+ * week they chose to skip is their decision, not the app's guess at their health.
+ */
+export function estimateWeight(logs: WeightLogs, day: string): number | null {
+  const dates = Object.keys(logs).sort();
+  let prev: { d: string; lb: number } | null = null;
+  let next: { d: string; lb: number } | null = null;
+  for (const d of dates) {
+    if (d <= day) prev = { d, lb: logs[d] };
+    else if (!next) next = { d, lb: logs[d] };
+  }
+  if (prev && next) {
+    const span = daysBetween(prev.d, next.d);
+    if (span <= 0) return prev.lb;
+    const t = daysBetween(prev.d, day) / span;
+    return Math.round((prev.lb + (next.lb - prev.lb) * t) * 10) / 10;
+  }
+  return prev ? prev.lb : null;
+}
+
 /* --------------------------------------------------------------------------
  * The sync half.
  *

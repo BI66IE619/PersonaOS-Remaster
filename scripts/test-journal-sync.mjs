@@ -14,6 +14,7 @@
 import { mergeRemote as mergeNotes, notePayload } from "../src/lib/notes.ts";
 import { checkinPayload, mergeRemote as mergeCheckins } from "../src/lib/checkins.ts";
 import {
+  estimateWeight,
   mergeRemote as mergeWeight,
   weightPayload,
 } from "../src/lib/weight-log.ts";
@@ -148,6 +149,18 @@ check(
   `${pulled.logs[DAY]}`,
 );
 check("the stamp is kept for conflict resolution", pulled.stamps[DAY] === LATER);
+
+console.log("\na skipped week can be estimated for the log");
+check("nothing to go on is null", estimateWeight({}, "2026-10-05") === null);
+check(
+  "a missing future reading carries the last one forward",
+  estimateWeight({ "2026-10-01": 150 }, "2026-10-05") === 150,
+);
+check(
+  "two readings either side are interpolated by day",
+  estimateWeight({ "2026-09-28": 150, "2026-10-12": 154 }, "2026-10-05") === 152,
+  `${estimateWeight({ "2026-09-28": 150, "2026-10-12": 154 }, "2026-10-05")}`,
+);
 
 console.log("\nweigh-ins merge by day");
 const w = weightState({ [DAY]: 140 }, { [DAY]: EARLIER });
