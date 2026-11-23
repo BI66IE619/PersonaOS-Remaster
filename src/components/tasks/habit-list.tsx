@@ -10,7 +10,7 @@ import {
   toggleHabit,
 } from "@/lib/habits";
 import { bestStreak, currentStreak } from "@/lib/streaks";
-import { addDays } from "@/lib/dates";
+import { addDays, shortDayLabel, weekStart } from "@/lib/dates";
 import { EVERY_DAY, WEEKDAYS, isScheduled, scheduleLabel } from "@/lib/habit-schedule";
 import { EmptyState } from "@/components/empty-state";
 import type { Habit } from "@/lib/types-habits";
@@ -77,6 +77,66 @@ function Caret({ up }: { up: boolean }) {
   );
 }
 
+function CalendarIcon() {
+  return (
+    <svg viewBox="0 0 12 12" aria-hidden className="h-3 w-3">
+      <rect x="1.5" y="2.5" width="9" height="8" rx="1.2" fill="none" stroke="currentColor" strokeWidth="1.1" />
+      <path d="M1.5 4.8h9M4 1.5v2M8 1.5v2" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** Four weeks of tappable days, so a streak can be filled in or corrected after
+ *  the fact rather than only toggled on the day itself. Weekday-aligned, because a
+ *  grid that looks like a calendar but is not one is worse than no grid. */
+function HabitDayGrid({ habit, today }: { habit: Habit; today: string }) {
+  const done = new Set(habit.days);
+  /* Monday of three weeks ago, so the 28 cells end on this week's Sunday. */
+  const start = addDays(weekStart(today), -21);
+  const cells = Array.from({ length: 28 }, (_, i) => addDays(start, i));
+
+  return (
+    <div className="mt-2 rounded-lg border border-hairline bg-white/[0.03] p-2.5">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-[10px] tracking-wider text-ink-3 uppercase">Last 4 weeks</span>
+        <span className="text-[10px] text-ink-3">Tap a day to mark it done</span>
+      </div>
+      <div className="mt-2 grid grid-cols-7 gap-1">
+        {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => (
+          <span key={`h${i}`} className="text-center text-[9px] text-ink-3">
+            {d}
+          </span>
+        ))}
+        {cells.map((d) => {
+          if (d > today) {
+            return <span key={d} className="aspect-square" aria-hidden />;
+          }
+          const isDone = done.has(d);
+          return (
+            <button
+              key={d}
+              type="button"
+              onClick={() => toggleHabit(habit.id, d)}
+              aria-pressed={isDone}
+              aria-label={`${shortDayLabel(d)}${isDone ? ", marked done" : ""}`}
+              title={shortDayLabel(d)}
+              className={[
+                "num grid aspect-square place-items-center rounded text-[10px] transition-colors",
+                isDone
+                  ? "bg-[var(--color-accent)] font-medium text-[var(--color-base)]"
+                  : "bg-white/[0.06] text-ink-3 hover:bg-white/[0.12] hover:text-ink-2",
+                d === today ? "ring-1 ring-[var(--color-accent-dim)]" : "",
+              ].join(" ")}
+            >
+              {Number(d.slice(8, 10))}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /** Seven toggles, Monday first. Shared by the add form and the inline editor so
  *  the two cannot disagree about what a selected day looks like. */
 function DayPicker({
@@ -132,6 +192,8 @@ function HabitRow({
   canDown,
   onMoveUp,
   onMoveDown,
+  daysOpen,
+  onToggleDays,
 }: {
   habit: Habit;
   today: string;
@@ -140,6 +202,8 @@ function HabitRow({
   canDown: boolean;
   onMoveUp: () => void;
   onMoveDown: () => void;
+  daysOpen: boolean;
+  onToggleDays: () => void;
 }) {
   const done = new Set(habit.days);
   const scheduledToday = isScheduled(today, habit.schedule);
@@ -194,11 +258,12 @@ function HabitRow({
   };
 
   return (
-    <li className="flex items-center gap-4 py-3.5 first:pt-1">
-      <button
-        type="button"
-        role="checkbox"
-        aria-checked={doneToday}
+    <li className="py-3.5 first:pt-1">
+      <div className="flex items-center gap-4">
+        <button
+          type="button"
+          role="checkbox"
+          aria-checked={doneToday}
         aria-label={
           scheduledToday
             ? `${doneToday ? "Undo" : "Complete"} "${habit.name}" for today`
@@ -314,6 +379,15 @@ function HabitRow({
           </div>
           <button
             type="button"
+            aria-label={`Edit days for "${habit.name}"`}
+            aria-expanded={daysOpen}
+            onClick={onToggleDays}
+            className="grid h-6 w-6 place-items-center rounded-full text-ink-3 transition-colors hover:bg-white/[0.07] hover:text-ink-2"
+          >
+            <CalendarIcon />
+          </button>
+          <button
+            type="button"
             aria-label={`Rename habit "${habit.name}"`}
             onClick={startEdit}
             className="grid h-6 w-6 place-items-center rounded-full text-ink-3 transition-colors hover:bg-white/[0.07] hover:text-ink-2"
@@ -330,6 +404,8 @@ function HabitRow({
           </button>
         </div>
       </div>
+      </div>
+      {daysOpen ? <HabitDayGrid habit={habit} today={today} /> : null}
     </li>
   );
 }
@@ -438,6 +514,7 @@ export function HabitList({ habits, today }: { habits: Habit[]; today: string })
   const [days, setDays] = useState<number[]>(EVERY_DAY);
   const [asking, setAsking] = useState<Habit | null>(null);
   const [showNotDue, setShowNotDue] = useState(true);
+  const [daysOpenId, setDaysOpenId] = useState<string | null>(null);
   const field = useRef<HTMLInputElement>(null);
 
   /* Stable, so the dialog's focus and Escape listener are not torn down and set
@@ -485,6 +562,8 @@ export function HabitList({ habits, today }: { habits: Habit[]; today: string })
                 canDown={i < due.length - 1}
                 onMoveUp={() => moveHabit(h.id, due[i - 1].id)}
                 onMoveDown={() => moveHabit(h.id, due[i + 1].id)}
+                daysOpen={daysOpenId === h.id}
+                onToggleDays={() => setDaysOpenId((cur) => (cur === h.id ? null : h.id))}
               />
             ))}
           </ul>
@@ -516,6 +595,8 @@ export function HabitList({ habits, today }: { habits: Habit[]; today: string })
                       canDown={i < notDue.length - 1}
                       onMoveUp={() => moveHabit(h.id, notDue[i - 1].id)}
                       onMoveDown={() => moveHabit(h.id, notDue[i + 1].id)}
+                      daysOpen={daysOpenId === h.id}
+                      onToggleDays={() => setDaysOpenId((cur) => (cur === h.id ? null : h.id))}
                     />
                   ))}
                 </ul>
