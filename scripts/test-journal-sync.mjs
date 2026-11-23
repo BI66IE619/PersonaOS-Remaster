@@ -56,6 +56,7 @@ const checkinsState = (entries = [], pendingDeletes = []) => ({
 const weightState = (logs = {}, stamps = {}, pendingDeletes = []) => ({
   logs,
   stamps,
+  estimated: {},
   owner: "u1",
   pendingDeletes,
 });
@@ -161,6 +162,21 @@ check(
   estimateWeight({ "2026-09-28": 150, "2026-10-12": 154 }, "2026-10-05") === 152,
   `${estimateWeight({ "2026-09-28": 150, "2026-10-12": 154 }, "2026-10-05")}`,
 );
+
+console.log("\nestimated readings are marked apart from weighed ones");
+const estPayload = weightPayload(DAY, 150, LATER, true);
+check("the push carries the estimate flag", estPayload.estimated === true);
+check("a weighed push does not", weightPayload(DAY, 150, LATER).estimated === false);
+const estMerged = mergeWeight(weightState(), {
+  weight: [{ day: DAY, kg: estPayload.kg, updatedAt: LATER, estimated: true }],
+  deleted: [],
+});
+check("the flag survives the pull", estMerged.estimated[DAY] === true);
+const reweighed = mergeWeight(estMerged, {
+  weight: [{ day: DAY, kg: 68, updatedAt: at(120_000), estimated: false }],
+  deleted: [],
+});
+check("a newer real reading clears the estimate flag", reweighed.estimated[DAY] === undefined);
 
 console.log("\nweigh-ins merge by day");
 const w = weightState({ [DAY]: 140 }, { [DAY]: EARLIER });

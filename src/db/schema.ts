@@ -212,6 +212,10 @@ export const weightLog = pgTable(
     /** kg, to the precision a scale reports. */
     kg: real("kg").notNull(),
     bodyFatPct: real("body_fat_pct"),
+    /** Whether this reading was estimated (a skipped week filled in from the
+     *  surrounding trend) rather than typed from a scale. Lets the screens mark it
+     *  as calculated instead of passing a guess off as a measurement. */
+    estimated: boolean("estimated").notNull().default(false),
     ...synced,
   },
   (t) => [

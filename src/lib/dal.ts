@@ -731,6 +731,7 @@ export async function upsertWeightLog(
     day: asDay(r.day, r.clientId),
     kg: r.kg,
     bodyFatPct: r.bodyFatPct ?? null,
+    estimated: r.estimated ?? false,
     updatedAt: asDate(r.updatedAt),
   }));
   await db
@@ -742,6 +743,7 @@ export async function upsertWeightLog(
         day: sql`excluded.day`,
         kg: sql`excluded.kg`,
         bodyFatPct: sql`excluded.body_fat_pct`,
+        estimated: sql`excluded.estimated`,
         updatedAt: sql`excluded.updated_at`,
         deletedAt: null,
       },

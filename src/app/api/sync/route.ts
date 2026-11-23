@@ -165,6 +165,8 @@ const WeightRow = z.object({
   day: Day,
   kg: z.number().min(0).max(1000),
   bodyFatPct: z.number().min(0).max(100).nullish(),
+  /* Set when the app filled a skipped week from the trend rather than a scale. */
+  estimated: z.boolean().optional().default(false),
 });
 /* A sport session. `source` is accepted rather than hard-coded so a device row
    from a future client is not silently rewritten as manual — but the app's own

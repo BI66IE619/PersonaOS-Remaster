@@ -120,6 +120,13 @@
       "when": 1790798539027,
       "tag": "0016_habit_schedule",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1790798539028,
+      "tag": "0017_weight_estimated",
+      "breakpoints": true
     }
   ]
 }

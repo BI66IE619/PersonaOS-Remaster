@@ -87,7 +87,7 @@ async function syncNow(): Promise<void> {
     notes: notes.entries.map(notePayload),
     checkins: checkins.entries.map(checkinPayload),
     weight: Object.entries(weight.logs).map(([date, lb]) =>
-      weightPayload(date, lb, weight.stamps[date]),
+      weightPayload(date, lb, weight.stamps[date], !!weight.estimated[date]),
     ),
     /* Manual sessions only. A device session's id is the phone's own Health
        Connect record, which the other device does not have — pushing it would

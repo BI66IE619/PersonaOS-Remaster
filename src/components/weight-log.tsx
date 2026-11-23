@@ -2,7 +2,7 @@
 
 import { useState, useSyncExternalStore } from "react";
 import { Sparkline } from "@/components/sparkline";
-import { daysBetween, weekStart } from "@/lib/dates";
+import { addDays, daysBetween, shortDayLabel, weekStart } from "@/lib/dates";
 import {
   EMPTY_LOGS,
   estimateWeight,
@@ -15,7 +15,7 @@ import {
   weightDue,
 } from "@/lib/weight-log";
 
-const RECENT = 6;
+const WEEKS_SHOWN = 8;
 
 function shortDate(date: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -26,7 +26,9 @@ function shortDate(date: string) {
 }
 
 export function WeightLog({ date }: { date: string }) {
-  const logs = logsOf(useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)) ?? EMPTY_LOGS;
+  const state = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const logs = logsOf(state) ?? EMPTY_LOGS;
+  const estimatedMap = state?.estimated ?? {};
   const [input, setInput] = useState("");
   /* A quiet way to correct a past reading — a skipped week's estimate, or a typo.
      There is no visible control: the weight itself is the button. */
@@ -54,6 +56,11 @@ export function WeightLog({ date }: { date: string }) {
     setEditValue(String(logs[d]));
   };
 
+  const startAdd = (monday: string) => {
+    setEditingDate(monday);
+    setEditValue("");
+  };
+
   const commitEditLog = () => {
     if (!editingDate) return;
     const lb = Number(editValue);
@@ -65,7 +72,23 @@ export function WeightLog({ date }: { date: string }) {
   const mean = points.length
     ? points.reduce((sum, p) => sum + p.value, 0) / points.length
     : 0;
-  const rows = dates.slice(-RECENT).reverse();
+  /* One row per week, anchored on its Monday, including weeks with no reading so a
+     missed one can be filled in. A reading does not have to land on the Monday, so
+     each row also carries the actual day it was logged. */
+  const weekRows = Array.from({ length: WEEKS_SHOWN }, (_, i) => {
+    const weekMonday = addDays(monday, -7 * i);
+    const sunday = addDays(weekMonday, 6);
+    const inWeek = Object.keys(logs)
+      .filter((d) => d >= weekMonday && d <= sunday && d <= date)
+      .sort();
+    const logDay = inWeek.length ? inWeek[inWeek.length - 1] : null;
+    return {
+      monday: weekMonday,
+      logDay,
+      lb: logDay ? logs[logDay] : null,
+      estimated: logDay ? !!estimatedMap[logDay] : false,
+    };
+  });
 
   return (
     /* Not h-full: the streak box sits under this one in the same column, and a
@@ -131,7 +154,7 @@ export function WeightLog({ date }: { date: string }) {
       {due && estimate !== null ? (
         <button
           type="button"
-          onClick={() => logWeight(monday, estimate)}
+          onClick={() => logWeight(monday, estimate, true)}
           className="mt-2 self-start text-left text-[11px] text-ink-3 transition-colors hover:text-ink-2"
         >
           Skip this week · log an estimate of{" "}
@@ -151,20 +174,24 @@ export function WeightLog({ date }: { date: string }) {
         </div>
       ) : null}
 
-      {rows.length ? (
-        /* A real list, and named: the rows are the only place a weigh-in is
-           listed, and a test or a screen reader needs to tell them apart from the
-           "Use last · 148.1 lb" button carrying the same digits. */
-        <ul className="mt-4 space-y-1.5" aria-label="Recent weigh-ins">
-          {rows.map((d) => (
+      {/* A week list rather than a reading list: every Monday for the last eight
+          weeks, including ones with no reading, so a missed week can be added and a
+          week logged on another day is shown with that day. Estimated readings are
+          marked, because the skip button fills one and it should not pass for a
+          measurement. */}
+      <ul className="mt-4 space-y-1.5" aria-label="Weeks">
+        {weekRows.map((w) => {
+          const logDay = w.logDay;
+          const key = logDay ?? w.monday;
+          const editing = editingDate === key;
+          return (
             <li
-              key={d}
+              key={w.monday}
               className="flex items-center justify-between gap-3 rounded-md px-1 py-0.5"
             >
-              <span className="num text-[11px] text-ink-3">
-                {d === date ? "today" : shortDate(d)}
-              </span>
-              {editingDate === d ? (
+              <span className="num text-[11px] text-ink-3">{shortDayLabel(w.monday)}</span>
+
+              {editing ? (
                 <span className="flex items-center gap-1">
                   <input
                     type="number"
@@ -182,7 +209,7 @@ export function WeightLog({ date }: { date: string }) {
                         setEditingDate(null);
                       }
                     }}
-                    aria-label={`Edit weigh-in for ${d === date ? "today" : shortDate(d)}`}
+                    aria-label={`Weigh-in for week of ${shortDayLabel(w.monday)}`}
                     autoFocus
                     className="num w-16 rounded border border-hairline bg-white/[0.07] px-1.5 py-0.5 text-[11px] text-ink focus:border-[var(--color-accent)] focus:outline-none"
                   />
@@ -194,33 +221,47 @@ export function WeightLog({ date }: { date: string }) {
                     Save
                   </button>
                 </span>
+              ) : logDay ? (
+                <button
+                  type="button"
+                  onClick={() => startEditLog(logDay)}
+                  title="Edit"
+                  aria-label={`Edit weigh-in for week of ${shortDayLabel(w.monday)}`}
+                  className="num rounded px-1 text-[11px] text-ink-2 transition-colors hover:bg-white/[0.06] hover:text-ink"
+                >
+                  {w.estimated ? "~" : ""}
+                  {w.lb} lb
+                  {logDay !== w.monday ? (
+                    <span className="text-ink-3"> · logged {shortDayLabel(logDay)}</span>
+                  ) : null}
+                  {w.estimated ? <span className="text-ink-3"> · est</span> : null}
+                </button>
               ) : (
                 <button
                   type="button"
-                  onClick={() => startEditLog(d)}
-                  title="Edit"
-                  aria-label={`Edit weigh-in from ${d === date ? "today" : shortDate(d)}`}
-                  className="num rounded px-1 text-[11px] text-ink-2 transition-colors hover:bg-white/[0.06] hover:text-ink"
+                  onClick={() => startAdd(w.monday)}
+                  className="text-[11px] text-ink-3 transition-colors hover:text-ink-2"
                 >
-                  {logs[d]} lb
+                  Not logged · add
                 </button>
               )}
-              <button
-                type="button"
-                onClick={() => removeWeight(d)}
-                aria-label={`Remove weigh-in from ${d === date ? "today" : shortDate(d)}`}
-                className="shrink-0 rounded px-1 text-[11px] text-ink-3 transition-colors hover:text-[var(--color-low)]"
-              >
-                ✕
-              </button>
+
+              {logDay ? (
+                <button
+                  type="button"
+                  onClick={() => removeWeight(logDay)}
+                  aria-label={`Remove weigh-in for week of ${shortDayLabel(w.monday)}`}
+                  className="shrink-0 rounded px-1 text-[11px] text-ink-3 transition-colors hover:text-[var(--color-low)]"
+                >
+                  ✕
+                </button>
+              ) : (
+                <span className="w-3 shrink-0" aria-hidden />
+              )}
             </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="mt-4 text-xs text-ink-3">
-          Weigh in each Monday and the trend builds itself.
-        </p>
-      )}
+          );
+        })}
+      </ul>
     </div>
   );
 }

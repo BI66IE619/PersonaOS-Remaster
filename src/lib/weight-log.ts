@@ -25,11 +25,19 @@ export const EMPTY_LOGS: WeightLogs = {};
 export type WeightState = {
   logs: WeightLogs;
   stamps: Record<string, string>;
+  /** Dates whose reading was estimated (a skipped week) rather than weighed. */
+  estimated: Record<string, boolean>;
   owner: string | null;
   pendingDeletes: string[];
 };
 
-export const EMPTY_STATE: WeightState = { logs: {}, stamps: {}, owner: null, pendingDeletes: [] };
+export const EMPTY_STATE: WeightState = {
+  logs: {},
+  stamps: {},
+  estimated: {},
+  owner: null,
+  pendingDeletes: [],
+};
 
 export const logsOf = (s: WeightState): WeightLogs => s.logs;
 
@@ -73,9 +81,19 @@ function revive(raw: unknown): WeightState {
     if (!stamps[date]) stamps[date] = new Date(0).toISOString();
   }
 
+  const estimated: Record<string, boolean> = {};
+  if (looksWrapped && o.estimated && typeof o.estimated === "object") {
+    for (const [date, v] of Object.entries(o.estimated as Record<string, unknown>)) {
+      /* Only for a day that is still a reading, so a stale flag cannot outlive the
+         weight it described. */
+      if (v === true && base.logs[date] !== undefined) estimated[date] = true;
+    }
+  }
+
   return {
     logs: base.logs,
     stamps,
+    estimated,
     owner: isStr(o.owner) && o.owner ? o.owner : null,
     pendingDeletes: reviveIds(o.pendingDeletes),
   };
@@ -116,14 +134,20 @@ export function latestLogged(logs: WeightLogs, today: string): number | null {
 
 /** One entry per calendar day — logging again in a day corrects it, not stacks.
  *  Moves the day's clock so the correction can travel to the other device. */
-export function logWeight(date: string, lb: number) {
+export function logWeight(date: string, lb: number, estimated = false) {
   const rounded = Math.round(lb * 10) / 10;
   if (!Number.isFinite(rounded) || rounded <= 0) return;
-  store.update((s) => ({
-    ...s,
-    logs: { ...s.logs, [date]: rounded },
-    stamps: { ...s.stamps, [date]: stampAfter(s.stamps[date]) },
-  }));
+  store.update((s) => {
+    const nextEstimated = { ...s.estimated };
+    if (estimated) nextEstimated[date] = true;
+    else delete nextEstimated[date];
+    return {
+      ...s,
+      logs: { ...s.logs, [date]: rounded },
+      stamps: { ...s.stamps, [date]: stampAfter(s.stamps[date]) },
+      estimated: nextEstimated,
+    };
+  });
 }
 
 export function removeWeight(date: string) {
@@ -133,10 +157,13 @@ export function removeWeight(date: string) {
     delete logs[date];
     const stamps = { ...s.stamps };
     delete stamps[date];
+    const estimated = { ...s.estimated };
+    delete estimated[date];
     return {
       ...s,
       logs,
       stamps,
+      estimated,
       pendingDeletes: [...new Set([...s.pendingDeletes, date])].slice(-MAX_PENDING_DELETES),
     };
   });
@@ -216,7 +243,9 @@ const kgToLb = (kg: number) => kg * LB_PER_KG;
 const lbToKg = (lb: number) => lb / LB_PER_KG;
 
 /** A reading as it arrives from the server, converted to pounds. */
-function reviveRemote(raw: unknown): { date: string; lb: number; updatedAt: string } | null {
+function reviveRemote(
+  raw: unknown,
+): { date: string; lb: number; updatedAt: string; estimated: boolean } | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
   const day = isStr(o.day) ? o.day : isStr(o.clientId) ? o.clientId : null;
@@ -225,7 +254,12 @@ function reviveRemote(raw: unknown): { date: string; lb: number; updatedAt: stri
      the same number rather than 135.0000001. */
   const lb = Math.round(kgToLb(o.kg as number) * 10) / 10;
   if (!usable(lb)) return null;
-  return { date: day, lb, updatedAt: isStr(o.updatedAt) ? o.updatedAt : new Date(0).toISOString() };
+  return {
+    date: day,
+    lb,
+    updatedAt: isStr(o.updatedAt) ? o.updatedAt : new Date(0).toISOString(),
+    estimated: o.estimated === true,
+  };
 }
 
 export function mergeRemote(
@@ -234,6 +268,7 @@ export function mergeRemote(
 ): WeightState {
   let logs = state.logs;
   let stamps = state.stamps;
+  let estimated = state.estimated;
   let changed = false;
   for (const raw of remote.weight) {
     const incoming = reviveRemote(raw);
@@ -242,6 +277,10 @@ export function mergeRemote(
     if (existingStamp !== undefined && !(incoming.updatedAt > existingStamp)) continue;
     logs = { ...logs, [incoming.date]: incoming.lb };
     stamps = { ...stamps, [incoming.date]: incoming.updatedAt };
+    const nextEstimated = { ...estimated };
+    if (incoming.estimated) nextEstimated[incoming.date] = true;
+    else delete nextEstimated[incoming.date];
+    estimated = nextEstimated;
     changed = true;
   }
   const gone = new Set(
@@ -255,19 +294,28 @@ export function mergeRemote(
       const next = { ...logs };
       delete next[date];
       logs = next;
+      const nextEstimated = { ...estimated };
+      delete nextEstimated[date];
+      estimated = nextEstimated;
       changed = true;
     }
   }
   if (!changed) return state;
-  return { ...state, logs, stamps };
+  return { ...state, logs, stamps, estimated };
 }
 
 /** A reading as pushed, converted to the kg the column stores. */
-export function weightPayload(date: string, lb: number, updatedAt: string) {
+export function weightPayload(
+  date: string,
+  lb: number,
+  updatedAt: string,
+  estimated = false,
+) {
   return {
     clientId: date,
     day: date,
     kg: lbToKg(lb),
+    estimated,
     updatedAt,
   };
 }
