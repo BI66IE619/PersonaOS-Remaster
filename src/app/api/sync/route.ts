@@ -157,6 +157,10 @@ const HabitRow = z.object({
   /* ISO weekdays, 1 = Monday … 7 = Sunday. Empty means every day, so a client that
      predates schedules keeps working. The 7 cap is the whole domain. */
   schedule: z.array(z.number().int().min(1).max(7)).max(7).default([]),
+  /* A pause: paused_from is the first paused day, paused_until the resume day
+     (exclusive) or null for indefinite. */
+  pausedFrom: Day.nullish(),
+  pausedUntil: Day.nullish(),
   days: z.array(Day).max(10_000).default([]),
   position: z.number().int().min(0).max(10_000),
 });
@@ -663,6 +667,8 @@ export async function GET(request: Request): Promise<Response> {
     clientId: h.clientId,
     name: h.name,
     schedule: h.schedule,
+    pausedFrom: h.pausedFrom,
+    pausedUntil: h.pausedUntil,
     days: daysByHabit.get(h.clientId) ?? [],
     updatedAt: h.updatedAt,
     position: h.position,

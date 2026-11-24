@@ -1375,6 +1375,8 @@ type PushedHabit = {
   clientId: string;
   name: string;
   schedule: number[];
+  pausedFrom?: string | null;
+  pausedUntil?: string | null;
   days: string[];
   position: number;
   updatedAt: string | number | Date;
@@ -1403,6 +1405,8 @@ export async function upsertPlanHabits(userId: string, pushed: PushedHabit[]) {
     clientId: h.clientId,
     name: h.name,
     schedule: h.schedule,
+    pausedFrom: h.pausedFrom ?? null,
+    pausedUntil: h.pausedUntil ?? null,
     position: h.position,
     updatedAt: asDate(h.updatedAt),
   }));
@@ -1420,6 +1424,8 @@ export async function upsertPlanHabits(userId: string, pushed: PushedHabit[]) {
         set: {
           name: sql`excluded.name`,
           schedule: sql`excluded.schedule`,
+          pausedFrom: sql`excluded.paused_from`,
+          pausedUntil: sql`excluded.paused_until`,
           position: sql`excluded.position`,
           updatedAt: sql`excluded.updated_at`,
           deletedAt: null,

@@ -17,6 +17,35 @@ export function isScheduled(date: string, schedule: readonly number[]): boolean 
   return schedule.length === 0 || schedule.includes(isoWeekday(date));
 }
 
+/** A habit's pause. `until` is the resume day (exclusive), or null for indefinite. */
+export type Pause = { from: string | null; until: string | null };
+
+/**
+ * Whether a day falls inside a pause.
+ *
+ * `from` is the first paused day; `until` is the day the habit resumes, exclusive,
+ * or null for "until I turn it back on". A pause is for a break — the days are not
+ * done, not missed, and must not break the streak.
+ */
+export function isPaused(
+  date: string,
+  from: string | null,
+  until: string | null,
+): boolean {
+  if (!from || date < from) return false;
+  return until === null || date < until;
+}
+
+/** Due means scheduled and not paused. This is what a streak counts. */
+export function isDue(
+  date: string,
+  schedule: readonly number[],
+  from: string | null,
+  until: string | null,
+): boolean {
+  return isScheduled(date, schedule) && !isPaused(date, from, until);
+}
+
 /**
  * The nearest due day strictly before `date`.
  *

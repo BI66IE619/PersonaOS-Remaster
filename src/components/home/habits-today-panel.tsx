@@ -13,7 +13,7 @@ import {
 import { getServerSnapshot, getSnapshot, subscribe, toggleHabit } from "@/lib/habits";
 import { EmptyState } from "@/components/empty-state";
 import { currentStreak } from "@/lib/streaks";
-import { isScheduled } from "@/lib/habit-schedule";
+import { isDue } from "@/lib/habit-schedule";
 import type { Habit } from "@/lib/types-habits";
 
 /** The same dot the tickable rows use, so a finished workout reads as finished. */
@@ -45,7 +45,10 @@ function Dot({ done }: { done: boolean }) {
 
 function Row({ habit, today }: { habit: Habit; today: string }) {
   const done = habit.days.includes(today);
-  const streak = currentStreak(habit.days, today, habit.schedule);
+  const streak = currentStreak(habit.days, today, habit.schedule, {
+    from: habit.pausedFrom,
+    until: habit.pausedUntil,
+  });
 
   return (
     <div className="flex items-center gap-3 py-1.5">
@@ -131,7 +134,7 @@ export function HabitsTodayPanel({ today }: { today: string }) {
 
   /* Only what is due today. A weekday habit has no business nagging on a
      Saturday, and showing it there is what made "done today" look unfinished. */
-  const due = state.habits.filter((h) => isScheduled(today, h.schedule));
+  const due = state.habits.filter((h) => isDue(today, h.schedule, h.pausedFrom, h.pausedUntil));
 
   /* Unfinished first. A ticked row stays listed, but leaving it where it was
      pushed the things still worth doing to the bottom of the list exactly as the

@@ -6,6 +6,11 @@ export type Habit = {
    *  day, which is what every habit saved before schedules existed becomes. The
    *  streak counts due days, so a weekday habit is not broken by the weekend. */
   schedule: number[];
+  /** First day of a pause, or null. A pause is for a break: due days inside it are
+   *  neither done nor missed, so they cannot break the streak. */
+  pausedFrom: string | null;
+  /** The day the habit resumes (exclusive), or null for "until I resume it". */
+  pausedUntil: string | null;
   /** Day keys on which the habit was done. */
   days: string[];
   /** The device's clock the last time this habit changed: renamed, a day toggled.

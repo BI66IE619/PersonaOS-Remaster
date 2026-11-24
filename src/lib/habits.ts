@@ -52,6 +52,8 @@ export function revive(raw: unknown): HabitsState {
         name: c.name.slice(0, 60),
         createdAt: isStr(c.createdAt) ? c.createdAt : new Date(0).toISOString(),
         schedule: normalizeSchedule(c.schedule),
+        pausedFrom: isDay(c.pausedFrom) ? c.pausedFrom : null,
+        pausedUntil: isDay(c.pausedUntil) ? c.pausedUntil : null,
         days,
         /* Habits saved before the clock existed read as long ago, so a stale push
            from this record loses to anything the server already knows. */
@@ -116,6 +118,8 @@ export function addHabitPure(
         name,
         createdAt: stamp,
         schedule: normalizeSchedule(schedule),
+        pausedFrom: null,
+        pausedUntil: null,
         days: [],
         updatedAt: stamp,
       },
@@ -198,6 +202,42 @@ export function setHabitSchedulePure(
  * hears. The pull side trusts the order only when a pull carried all of them,
  * which a full restamp guarantees.
  */
+/** Start a pause. `from` is today; `until` is the resume day (exclusive) or null
+ *  to pause until the user resumes it. */
+export function pauseHabitPure(
+  state: HabitsState,
+  id: string,
+  from: string,
+  until: string | null,
+): HabitsState {
+  if (!state.habits.some((h) => h.id === id)) return state;
+  return {
+    ...state,
+    seeded: true,
+    habits: state.habits.map((h) =>
+      h.id === id
+        ? { ...h, pausedFrom: from, pausedUntil: until, updatedAt: stampAfter(h.updatedAt) }
+        : h,
+    ),
+  };
+}
+
+/** Resume on `resumeOn`, which becomes the first active day. */
+export function resumeHabitPure(
+  state: HabitsState,
+  id: string,
+  resumeOn: string,
+): HabitsState {
+  if (!state.habits.some((h) => h.id === id)) return state;
+  return {
+    ...state,
+    seeded: true,
+    habits: state.habits.map((h) =>
+      h.id === id ? { ...h, pausedUntil: resumeOn, updatedAt: stampAfter(h.updatedAt) } : h,
+    ),
+  };
+}
+
 export function moveHabitPure(state: HabitsState, id: string, targetId: string): HabitsState {
   const from = state.habits.findIndex((h) => h.id === id);
   const to = state.habits.findIndex((h) => h.id === targetId);
@@ -247,6 +287,8 @@ function reviveHabit(raw: unknown): Habit | null {
     name: o.name.slice(0, 60),
     createdAt: stamp,
     schedule: normalizeSchedule(o.schedule),
+    pausedFrom: isDay(o.pausedFrom) ? o.pausedFrom : null,
+    pausedUntil: isDay(o.pausedUntil) ? o.pausedUntil : null,
     days: Array.isArray(o.days) ? [...new Set(o.days.filter(isDay))].sort() : [],
     updatedAt: stamp,
   };
@@ -329,6 +371,8 @@ export function habitPayload(h: Habit, position: number) {
     clientId: h.id,
     name: h.name,
     schedule: h.schedule,
+    pausedFrom: h.pausedFrom,
+    pausedUntil: h.pausedUntil,
     days: h.days,
     updatedAt: h.updatedAt,
     position,
@@ -345,6 +389,14 @@ export function addHabit(name: string, schedule: readonly number[] = EVERY_DAY) 
 
 export function setHabitSchedule(id: string, schedule: readonly number[]) {
   store.update((s) => setHabitSchedulePure(s, id, schedule));
+}
+
+export function pauseHabit(id: string, from: string, until: string | null) {
+  store.update((s) => pauseHabitPure(s, id, from, until));
+}
+
+export function resumeHabit(id: string, resumeOn: string) {
+  store.update((s) => resumeHabitPure(s, id, resumeOn));
 }
 
 export function moveHabit(id: string, targetId: string) {

@@ -156,6 +156,11 @@ export const habits = pgTable(
      *  jsonb rather than a join table: a schedule has no identity of its own and is
      *  replaced wholesale. */
     schedule: jsonb("schedule").$type<number[]>().notNull().default([]),
+    /** First day of a pause, or null. Due days inside a pause count as neither done
+     *  nor missed, so a break does not break the streak. */
+    pausedFrom: date("paused_from"),
+    /** The day the habit resumes (exclusive), or null for "until resumed". */
+    pausedUntil: date("paused_until"),
     /** Order in the list, since there is nothing else to sort by. */
     position: integer("position").notNull().default(0),
     archivedAt: timestamp("archived_at", { withTimezone: true }),

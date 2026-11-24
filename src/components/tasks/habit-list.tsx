@@ -4,14 +4,22 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   addHabit,
   moveHabit,
+  pauseHabit,
   removeHabit,
   renameHabit,
+  resumeHabit,
   setHabitSchedule,
   toggleHabit,
 } from "@/lib/habits";
 import { bestStreak, currentStreak } from "@/lib/streaks";
 import { addDays, shortDayLabel, weekStart } from "@/lib/dates";
-import { EVERY_DAY, WEEKDAYS, isScheduled, scheduleLabel } from "@/lib/habit-schedule";
+import {
+  EVERY_DAY,
+  WEEKDAYS,
+  isDue,
+  isPaused,
+  scheduleLabel,
+} from "@/lib/habit-schedule";
 import { EmptyState } from "@/components/empty-state";
 import type { Habit } from "@/lib/types-habits";
 import { solid } from "@/lib/theme";
@@ -86,6 +94,23 @@ function CalendarIcon() {
   );
 }
 
+function PauseIcon() {
+  return (
+    <svg viewBox="0 0 12 12" aria-hidden className="h-3 w-3">
+      <rect x="3" y="2.5" width="2" height="7" rx="0.6" fill="currentColor" />
+      <rect x="7" y="2.5" width="2" height="7" rx="0.6" fill="currentColor" />
+    </svg>
+  );
+}
+
+function PlayIcon() {
+  return (
+    <svg viewBox="0 0 12 12" aria-hidden className="h-3 w-3">
+      <path d="M3.5 2.6 9.5 6l-6 3.4z" fill="currentColor" />
+    </svg>
+  );
+}
+
 /** Four weeks of tappable days, so a streak can be filled in or corrected after
  *  the fact rather than only toggled on the day itself. Weekday-aligned, because a
  *  grid that looks like a calendar but is not one is worse than no grid. */
@@ -110,6 +135,17 @@ function HabitDayGrid({ habit, today }: { habit: Habit; today: string }) {
         {cells.map((d) => {
           if (d > today) {
             return <span key={d} className="aspect-square" aria-hidden />;
+          }
+          if (isPaused(d, habit.pausedFrom, habit.pausedUntil)) {
+            return (
+              <span
+                key={d}
+                title={`${shortDayLabel(d)} · paused`}
+                className="num grid aspect-square place-items-center rounded border border-dashed border-hairline text-[10px] text-ink-3 opacity-50"
+              >
+                –
+              </span>
+            );
           }
           const isDone = done.has(d);
           return (
@@ -206,9 +242,11 @@ function HabitRow({
   onToggleDays: () => void;
 }) {
   const done = new Set(habit.days);
-  const scheduledToday = isScheduled(today, habit.schedule);
-  const streak = currentStreak(habit.days, today, habit.schedule);
-  const best = bestStreak(habit.days, habit.schedule);
+  const pause = { from: habit.pausedFrom, until: habit.pausedUntil };
+  const pausedToday = isPaused(today, pause.from, pause.until);
+  const dueToday = isDue(today, habit.schedule, pause.from, pause.until);
+  const streak = currentStreak(habit.days, today, habit.schedule, pause);
+  const best = bestStreak(habit.days, habit.schedule, pause);
   const doneToday = done.has(today);
   const everyDay = habit.schedule.length === 0 || habit.schedule.length === 7;
 
@@ -222,6 +260,8 @@ function HabitRow({
   const [draftDays, setDraftDays] = useState<number[]>(
     habit.schedule.length ? habit.schedule : EVERY_DAY,
   );
+  const [pausing, setPausing] = useState(false);
+  const [resumeOn, setResumeOn] = useState("");
   const field = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -265,16 +305,18 @@ function HabitRow({
           role="checkbox"
           aria-checked={doneToday}
         aria-label={
-          scheduledToday
+          dueToday
             ? `${doneToday ? "Undo" : "Complete"} "${habit.name}" for today`
-            : `${habit.name} is not scheduled today`
+            : pausedToday
+              ? `${habit.name} is paused`
+              : `${habit.name} is not scheduled today`
         }
         onClick={() => toggleHabit(habit.id, today)}
-        disabled={!scheduledToday}
-        title={scheduledToday ? undefined : "Rest day"}
+        disabled={!dueToday}
+        title={dueToday ? undefined : pausedToday ? "Paused" : "Rest day"}
         className={[
           "grid h-7 w-7 shrink-0 place-items-center rounded-full border transition-colors",
-          !scheduledToday
+          !dueToday
             ? "cursor-default border-hairline opacity-40"
             : doneToday
               ? "border-transparent bg-ink"
@@ -330,7 +372,13 @@ function HabitRow({
           <p className="truncate text-[13px] text-ink-2">{habit.name}</p>
         )}
         <p className="num mt-0.5 text-[10px] text-ink-3">
-          {scheduledToday ? streakLabel(streak) : "rest day"}
+          {pausedToday
+            ? habit.pausedUntil
+              ? `paused until ${shortDayLabel(habit.pausedUntil)}`
+              : "paused"
+            : dueToday
+              ? streakLabel(streak)
+              : "rest day"}
           {everyDay ? "" : ` · ${scheduleLabel(habit.schedule)}`}
         </p>
       </div>
@@ -379,6 +427,15 @@ function HabitRow({
           </div>
           <button
             type="button"
+            aria-label={pausedToday ? `Resume habit "${habit.name}"` : `Pause habit "${habit.name}"`}
+            aria-expanded={pausing}
+            onClick={() => (pausedToday ? resumeHabit(habit.id, today) : setPausing((p) => !p))}
+            className="grid h-6 w-6 place-items-center rounded-full text-ink-3 transition-colors hover:bg-white/[0.07] hover:text-ink-2"
+          >
+            {pausedToday ? <PlayIcon /> : <PauseIcon />}
+          </button>
+          <button
+            type="button"
             aria-label={`Edit days for "${habit.name}"`}
             aria-expanded={daysOpen}
             onClick={onToggleDays}
@@ -406,6 +463,45 @@ function HabitRow({
       </div>
       </div>
       {daysOpen ? <HabitDayGrid habit={habit} today={today} /> : null}
+      {pausing ? (
+        <div className="mt-2 rounded-lg border border-hairline bg-white/[0.03] p-2.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] text-ink-3">Pause from today. Resume on</span>
+            <input
+              type="date"
+              value={resumeOn}
+              onChange={(e) => setResumeOn(e.target.value)}
+              aria-label="Resume date"
+              className="num rounded border border-hairline bg-white/[0.07] px-2 py-1 text-xs text-ink focus:border-[var(--color-accent)] focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                pauseHabit(habit.id, today, resumeOn || null);
+                setPausing(false);
+                setResumeOn("");
+              }}
+              className="rounded border border-hairline px-2 py-0.5 text-[10px] text-ink-2 transition-colors hover:border-[var(--color-accent)]"
+            >
+              Pause
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setPausing(false);
+                setResumeOn("");
+              }}
+              className="text-[10px] text-ink-3 transition-colors hover:text-ink-2"
+            >
+              Cancel
+            </button>
+          </div>
+          <p className="mt-1 text-[10px] text-ink-3">
+            Leave the date empty to pause until you resume it. Paused days do not break
+            the streak.
+          </p>
+        </div>
+      ) : null}
     </li>
   );
 }
@@ -443,8 +539,14 @@ function ConfirmDeleteHabit({
 }) {
   const keep = useRef<HTMLButtonElement>(null);
   const done = habit.days.length;
-  const streak = currentStreak(habit.days, today, habit.schedule);
-  const best = bestStreak(habit.days, habit.schedule);
+  const streak = currentStreak(habit.days, today, habit.schedule, {
+    from: habit.pausedFrom,
+    until: habit.pausedUntil,
+  });
+  const best = bestStreak(habit.days, habit.schedule, {
+    from: habit.pausedFrom,
+    until: habit.pausedUntil,
+  });
 
   /* Built as a list and joined, so no combination of streak and best can repeat
      or drop a part of the sentence. */
@@ -537,8 +639,8 @@ export function HabitList({ habits, today }: { habits: Habit[]; today: string })
      read as separate lists rather than one list with a few faded rows, and the
      move buttons' neighbours are the ones in the same group — moving a habit past
      a day it is not due on would be meaningless. */
-  const due = habits.filter((h) => isScheduled(today, h.schedule));
-  const notDue = habits.filter((h) => !isScheduled(today, h.schedule));
+  const due = habits.filter((h) => isDue(today, h.schedule, h.pausedFrom, h.pausedUntil));
+  const notDue = habits.filter((h) => !isDue(today, h.schedule, h.pausedFrom, h.pausedUntil));
 
   return (
     <div className="panel flex flex-col p-5">

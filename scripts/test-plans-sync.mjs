@@ -30,8 +30,10 @@ import {
   habitPayload,
   mergeRemote as mergeHabits,
   moveHabitPure,
+  pauseHabitPure,
   removeHabitPure,
   renameHabitPure,
+  resumeHabitPure,
   setHabitSchedulePure,
   revive as reviveHabits,
   toggleHabitPure,
@@ -474,6 +476,40 @@ console.log("\nplan sync: the merge, the payloads, the tombstones\n");
   check(
     "an incremental pull leaves the order alone",
     mergeHabits(s, { habits: [full[2]], deleted: [] }).habits.map((h) => h.name).join("") === "ABC",
+  );
+}
+
+/* ---- 12e. a pause carries the streak across a break ---- */
+{
+  const workdays = [1, 2, 3, 4, 5];
+  /* A full week done, then a week off, then back on Monday 2026-10-05. */
+  const week = ["2026-09-21", "2026-09-22", "2026-09-23", "2026-09-24", "2026-09-25"];
+  const pause = { from: "2026-09-26", until: "2026-10-05" };
+
+  check(
+    "a week of missed schooldays breaks the streak",
+    currentStreak(week, "2026-10-05", workdays) === 0,
+    `${currentStreak(week, "2026-10-05", workdays)}`,
+  );
+  check(
+    "a paused break does not",
+    currentStreak(week, "2026-10-05", workdays, pause) === 5,
+    `${currentStreak(week, "2026-10-05", workdays, pause)}`,
+  );
+  check("and the best run is unchanged", bestStreak(week, workdays, pause) === 5);
+
+  const s = addHabitPure(EMPTY_HABITS, "Gym", workdays);
+  const id = s.habits[0].id;
+  const paused = pauseHabitPure(s, id, "2026-09-26", "2026-10-05");
+  check(
+    "a pause is stored",
+    paused.habits[0].pausedFrom === "2026-09-26" && paused.habits[0].pausedUntil === "2026-10-05",
+  );
+  check("and moves the clock so it travels", paused.habits[0].updatedAt > s.habits[0].updatedAt);
+  const resumed = resumeHabitPure(paused, id, "2026-10-05");
+  check(
+    "resume keeps the start and sets the resume day",
+    resumed.habits[0].pausedFrom === "2026-09-26" && resumed.habits[0].pausedUntil === "2026-10-05",
   );
 }
 

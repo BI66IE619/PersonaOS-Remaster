@@ -127,6 +127,13 @@
       "when": 1790798539028,
       "tag": "0017_weight_estimated",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790798539029,
+      "tag": "0018_habit_pause",
+      "breakpoints": true
     }
   ]
 }
