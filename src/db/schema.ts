@@ -135,6 +135,9 @@ export const checkins = pgTable(
     /** Soreness 1-5, if rated. Nullable because "not rated" is a real answer and
      *  distinct from a 1. */
     soreness: integer("soreness"),
+    /** Minutes of sleep for the night that ended this morning, when the watch missed
+     *  it and the user entered it by hand. Null when not entered. */
+    sleepMin: integer("sleep_min"),
     ...synced,
   },
   (t) => [

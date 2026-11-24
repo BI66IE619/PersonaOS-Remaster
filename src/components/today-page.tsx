@@ -94,7 +94,7 @@ export function TodayPage({ view }: { view: TodayView }) {
         {/* how the day actually felt */}
         <CheckInPanel key={view.date} today={view.date} />
 
-        <SleepInsights series={view.sleepSeries} />
+        <SleepInsights series={view.sleepSeries} today={view.date} />
 
         {/* Sparks close the grid, so they take the full twelve columns. At seven
             they left the last five empty, which read as a hole beside the panel

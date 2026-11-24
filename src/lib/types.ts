@@ -56,6 +56,10 @@ export type CheckIn = {
    *  that every day, however bad, leaves with one good thing named. Stored in the
    *  check-in's otherwise-unused text column, so it syncs with the rest of the day. */
   win: string;
+  /** Minutes of sleep for the night that ended this morning, entered by hand when the
+   *  watch missed it. 0 means none. Feeds the sleep trend/debt only — readiness keeps
+   *  using watch-measured nights. */
+  sleepMin: number;
 };
 
 export type TodayView = {

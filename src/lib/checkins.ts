@@ -21,6 +21,10 @@ const isDay = (v: unknown): v is string => typeof v === "string" && /^\d{4}-\d{2
 const scale = (v: unknown): number =>
   typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= 5 ? v : 0;
 
+/** A hand-entered night's sleep, in minutes. 0 means not entered; capped at a day. */
+const sleepMinutes = (v: unknown): number =>
+  typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= 24 * 60 ? v : 0;
+
 /** A check-in as this device stores it. `updatedAt` is the sync clock. */
 export type StoredCheckIn = CheckIn & { updatedAt: string };
 
@@ -32,15 +36,17 @@ function normalize(raw: unknown): StoredCheckIn | null {
   const mood = scale(o.mood);
   const soreness = scale(o.soreness);
   const win = isStr(o.win) ? o.win.slice(0, 2000) : "";
-  /* Nothing rated and no win is not a check-in. A day with only a win is: naming
-     the win is the part the box is for. */
-  if (!energy && !mood && !soreness && !win) return null;
+  const sleepMin = sleepMinutes(o.sleepMin);
+  /* Nothing rated, no win and no sleep is not a check-in. A day with only a win or
+     only a hand-entered night is: those are the parts the boxes exist for. */
+  if (!energy && !mood && !soreness && !win && !sleepMin) return null;
   return {
     date: o.date,
     energy,
     mood,
     soreness,
     win,
+    sleepMin,
     updatedAt: isStr(o.updatedAt) ? o.updatedAt : new Date(0).toISOString(),
   };
 }
@@ -134,16 +140,56 @@ export function saveCheckIn(date: string, patch: Omit<CheckIn, "date">) {
     mood: scale(patch.mood),
     soreness: scale(patch.soreness),
     win: (patch.win ?? "").slice(0, 2000).trim(),
+    sleepMin: sleepMinutes(patch.sleepMin ?? existing?.sleepMin ?? 0),
     updatedAt: stampAfter(existing?.updatedAt),
   };
-  /* Clearing every scale and the win should drop the day rather than leave an
-     empty row and owes the server a tombstone for the same reason a note delete
-     does. The UI requires a win, so this is the explicit Clear path. */
-  if (!next.energy && !next.mood && !next.soreness && !next.win) {
+  /* Clearing every scale, the win and the sleep should drop the day rather than
+     leave an empty row and owes the server a tombstone for the same reason a note
+     delete does. */
+  if (!next.energy && !next.mood && !next.soreness && !next.win && !next.sleepMin) {
     if (!existing) return;
     store.set(withTombstone(s, date, s.entries.filter((e) => e.date !== date)));
     return;
   }
+  store.set({
+    ...s,
+    seeded: true,
+    entries: [next, ...s.entries.filter((e) => e.date !== date)].sort(sortDesc),
+  });
+}
+
+/**
+ * Log a night's sleep by hand when the watch missed it.
+ *
+ * Kept separate from saveCheckIn because it must not require a win or a rating:
+ * the point is the person who has only one fact to record. It keeps whatever scales
+ * or win that day already has, and clearing it back to zero drops the day only if
+ * nothing else is on it. Feeds the sleep trend; readiness ignores it.
+ */
+export function logSleep(date: string, minutes: number) {
+  const s = store.getSnapshot();
+  const existing = s.entries.find((e) => e.date === date);
+  const trimmed = sleepMinutes(minutes);
+  if (
+    !trimmed &&
+    !existing?.energy &&
+    !existing?.mood &&
+    !existing?.soreness &&
+    !existing?.win
+  ) {
+    if (!existing) return;
+    store.set(withTombstone(s, date, s.entries.filter((e) => e.date !== date)));
+    return;
+  }
+  const next: StoredCheckIn = {
+    date,
+    energy: existing?.energy ?? 0,
+    mood: existing?.mood ?? 0,
+    soreness: existing?.soreness ?? 0,
+    win: existing?.win ?? "",
+    sleepMin: trimmed,
+    updatedAt: stampAfter(existing?.updatedAt),
+  };
   store.set({
     ...s,
     seeded: true,
@@ -184,13 +230,15 @@ function reviveRemote(raw: unknown): StoredCheckIn | null {
   const soreness = scale(o.soreness);
   /* The win rides in the check-in's text column; this is the only reader of it. */
   const win = isStr(o.text) ? o.text.slice(0, 2000) : "";
-  if (!energy && !mood && !soreness && !win.trim()) return null;
+  const sleepMin = sleepMinutes(o.sleepMin);
+  if (!energy && !mood && !soreness && !win.trim() && !sleepMin) return null;
   return {
     date: day,
     energy,
     mood,
     soreness,
     win,
+    sleepMin,
     updatedAt: isStr(o.updatedAt) ? o.updatedAt : new Date(0).toISOString(),
   };
 }
@@ -230,6 +278,7 @@ export function checkinPayload(c: StoredCheckIn) {
     mood: c.mood || null,
     energy: c.energy || null,
     soreness: c.soreness || null,
+    sleepMin: c.sleepMin || null,
     updatedAt: c.updatedAt,
   };
 }

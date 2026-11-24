@@ -134,6 +134,13 @@
       "when": 1790798539029,
       "tag": "0018_habit_pause",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790798539030,
+      "tag": "0019_checkin_sleep",
+      "breakpoints": true
     }
   ]
 }

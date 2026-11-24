@@ -167,7 +167,7 @@ export function CheckInPanel({ today }: { today: string }) {
 
   const rate = (key: ScaleKey, n: number) => {
     setSaved(false);
-    const base = entry ?? { date: selected, energy: 0, mood: 0, soreness: 0, win: "" };
+    const base = entry ?? { date: selected, energy: 0, mood: 0, soreness: 0, win: "", sleepMin: 0 };
     const current = base[key] ?? 0;
     /* 0 means "not rated", so tapping the active rating has to clear it again
        or a mis-tap can never be undone. */
@@ -176,7 +176,7 @@ export function CheckInPanel({ today }: { today: string }) {
 
   const setWin = (value: string) => {
     setSaved(false);
-    const base = entry ?? { date: selected, energy: 0, mood: 0, soreness: 0, win: "" };
+    const base = entry ?? { date: selected, energy: 0, mood: 0, soreness: 0, win: "", sleepMin: 0 };
     setDraft({ ...base, date: selected, win: value });
   };
 
@@ -187,6 +187,7 @@ export function CheckInPanel({ today }: { today: string }) {
       mood: entry.mood,
       soreness: entry.soreness,
       win: entry.win,
+      sleepMin: entry.sleepMin,
     });
     setDraft(null);
     setSaved(true);

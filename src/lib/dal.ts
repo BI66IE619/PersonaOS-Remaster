@@ -701,6 +701,7 @@ export async function upsertCheckins(
     mood: r.mood ?? null,
     energy: r.energy ?? null,
     soreness: r.soreness ?? null,
+    sleepMin: r.sleepMin ?? null,
     updatedAt: asDate(r.updatedAt),
   }));
   await db
@@ -714,6 +715,7 @@ export async function upsertCheckins(
         mood: sql`excluded.mood`,
         energy: sql`excluded.energy`,
         soreness: sql`excluded.soreness`,
+        sleepMin: sql`excluded.sleep_min`,
         updatedAt: sql`excluded.updated_at`,
         deletedAt: null,
       },

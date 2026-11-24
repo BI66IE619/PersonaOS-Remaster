@@ -128,6 +128,13 @@ check(
   }).entries.length === 0,
 );
 check(
+  "a hand-logged night alone is kept as a check-in",
+  mergeCheckins(checkinsState(), {
+    checkins: [{ day: DAY, energy: 0, mood: 0, soreness: 0, text: "", sleepMin: 450, updatedAt: LATER }],
+    deleted: [],
+  }).entries[0]?.sleepMin === 450,
+);
+check(
   "a check-in tombstone is ignored by notes and weight",
   mergeCheckins(ci, { checkins: [], deleted: [`note:${DAY}`] }).entries.length === 1,
 );
@@ -208,6 +215,11 @@ check(
     "Finished the essay",
 );
 check("checkin payload nulls an unrated scale", checkinPayload({ date: DAY, energy: 0, mood: 0, soreness: 0, win: "", updatedAt: LATER }).energy === null);
+check(
+  "checkin payload carries a hand-logged night in minutes",
+  checkinPayload({ date: DAY, energy: 0, mood: 0, soreness: 0, win: "", sleepMin: 450, updatedAt: LATER })
+    .sleepMin === 450,
+);
 
 console.log("\nsport sessions merge by id, manual only in the payload");
 const sportsState = (sessions = [], pendingDeletes = []) => ({

@@ -99,6 +99,9 @@ const CheckinRow = z.object({
   mood: z.number().int().min(1).max(5).nullish(),
   energy: z.number().int().min(1).max(5).nullish(),
   soreness: z.number().int().min(1).max(5).nullish(),
+  /* A hand-entered night's sleep, in minutes, for when the watch missed it. Trend
+     only; readiness ignores it. */
+  sleepMin: z.number().int().min(0).max(24 * 60).nullish(),
 });
 /* A task's day is nullable and only this one is: no due date is the "someday"
    bucket, a real state in the app. `day.nullable()` rather than Day.nullish(), so

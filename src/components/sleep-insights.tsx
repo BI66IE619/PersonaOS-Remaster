@@ -1,8 +1,9 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { Sparkline } from "@/components/sparkline";
-import { getSnapshot, subscribe, getServerSnapshot } from "@/lib/checkins";
+import { getSnapshot, logSleep, subscribe, getServerSnapshot } from "@/lib/checkins";
+import { shortDayLabel } from "@/lib/dates";
 import { sleepDebt, sleepVsEnergy } from "@/lib/insights";
 import type { SleepPoint } from "@/lib/insights";
 
@@ -19,15 +20,40 @@ const EMPTY_CHECKINS = { entries: [] };
  * sized by the check-in beside it; the trend is also the one thing the two
  * readings cannot show on their own.
  */
-export function SleepInsights({ series }: { series: SleepPoint[] }) {
+export function SleepInsights({ series, today }: { series: SleepPoint[]; today: string }) {
   const state = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   const checkIns = state?.entries ?? EMPTY_CHECKINS.entries;
+  const [sleepDate, setSleepDate] = useState(today);
+  const [sleepHours, setSleepHours] = useState("");
 
-  const debt = sleepDebt(series);
-  const link = sleepVsEnergy(series, checkIns);
+  /* Hand-entered nights fill in where the watch had nothing; a measured night always
+     wins for the same day. Readiness is untouched by these — it is computed on the
+     server and deliberately only scores nights with a window and stages. */
+  const manual = new Map(
+    checkIns.filter((c) => c.sleepMin > 0).map((c) => [c.date, c.sleepMin] as const),
+  );
+  const merged: SleepPoint[] = series.map((p) => ({ ...p }));
+  for (const [date, minutes] of manual) {
+    if (!merged.some((p) => p.date === date)) merged.push({ date, totalMin: minutes });
+  }
+  merged.sort((a, b) => a.date.localeCompare(b.date));
+
+  const debt = sleepDebt(merged);
+  const link = sleepVsEnergy(merged, checkIns);
+
+  const manualEntries = checkIns
+    .filter((c) => c.sleepMin > 0)
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  const saveSleep = () => {
+    const h = Number(sleepHours);
+    if (!Number.isFinite(h) || h <= 0) return;
+    logSleep(sleepDate, Math.round(h * 60));
+    setSleepHours("");
+  };
 
   /* Hours, to match the median printed above the line. */
-  const points = series.map((p) => ({ date: p.date, value: p.totalMin / 60 }));
+  const points = merged.map((p) => ({ date: p.date, value: p.totalMin / 60 }));
   const last = points[points.length - 1]?.value ?? 0;
   const mean = debt.enough
     ? debt.medianMin / 60
@@ -95,6 +121,64 @@ export function SleepInsights({ series }: { series: SleepPoint[] }) {
           statGood={debt.enough && debt.debtMin === 0}
         />
         <Read title="Sleep and your energy" body={link.verdict} muted={!link.enough} />
+      </div>
+
+      {/* Watch off for a night. Entered against the wake day and folded into the
+          line above; readiness deliberately ignores it. */}
+      <div className="mt-4 shrink-0 border-t border-hairline pt-3">
+        <span className="text-[10px] tracking-wider text-ink-3 uppercase">
+          Log a missed night
+        </span>
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          <input
+            type="date"
+            value={sleepDate}
+            onChange={(e) => setSleepDate(e.target.value)}
+            aria-label="Night"
+            className="num rounded border border-hairline bg-white/[0.07] px-2 py-1 text-xs text-ink focus:border-[var(--color-accent)] focus:outline-none"
+          />
+          <input
+            type="number"
+            inputMode="decimal"
+            min={0}
+            step={0.1}
+            value={sleepHours}
+            onChange={(e) => setSleepHours(e.target.value)}
+            placeholder="hours"
+            aria-label="Hours slept"
+            className="num w-16 rounded border border-hairline bg-white/[0.07] px-2 py-1 text-xs text-ink placeholder:text-ink-3 focus:border-[var(--color-accent)] focus:outline-none"
+          />
+          <button
+            type="button"
+            onClick={saveSleep}
+            disabled={!sleepHours || Number(sleepHours) <= 0}
+            className="rounded border border-hairline px-2 py-1 text-[10px] text-ink-2 transition-colors hover:border-[var(--color-accent)] disabled:opacity-40"
+          >
+            Add
+          </button>
+        </div>
+        {manualEntries.length ? (
+          <ul className="mt-2 space-y-1">
+            {manualEntries.map((c) => (
+              <li key={c.date} className="flex items-center justify-between gap-3">
+                <span className="num text-[11px] text-ink-3">{shortDayLabel(c.date)}</span>
+                <span className="num text-[11px] text-ink-2">{fmtH(c.sleepMin)}</span>
+                <button
+                  type="button"
+                  onClick={() => logSleep(c.date, 0)}
+                  aria-label={`Remove hand-logged sleep for ${shortDayLabel(c.date)}`}
+                  className="shrink-0 rounded px-1 text-[11px] text-ink-3 transition-colors hover:text-[var(--color-low)]"
+                >
+                  ✕
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-2 text-[10px] text-ink-3">
+            Only for nights the watch missed. It feeds the trend, not readiness.
+          </p>
+        )}
       </div>
     </section>
   );
